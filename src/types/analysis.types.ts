@@ -8,16 +8,15 @@ export enum AnalysisStatus {
 export interface JointAngle {
   jointName: string;
   measuredAngle: number;
-  idealAngleRange: string; // e.g., "160-180"
+  idealAngleRange: string;
   status: 'Good' | 'Needs Improvement' | 'Critical';
 }
 
 export interface BiomechanicalFeedback {
   movementName: string;
   confidence: number;
-  phaseDetected: string; // e.g., "Hold Phase", "Ascent"
+  phaseDetected: string;
 
-  // Step-by-step breakdown
   steps: {
     stepName: string;
     status: 'Correct' | 'Incorrect' | 'Needs Improvement';
@@ -28,9 +27,16 @@ export interface BiomechanicalFeedback {
   jointAngles: JointAngle[];
   observations: string[];
   corrections: string[];
-  safetyRating: number; // 1-10
+  safetyRating: number;
 }
 
 export interface AnalysisResponse {
   feedback: BiomechanicalFeedback;
+}
+
+export interface HistoryItem {
+  id: string;
+  thumbnail: string;
+  timestamp: string;
+  result: AnalysisResponse;
 }

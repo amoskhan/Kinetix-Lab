@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { BrainCircuit, Info, History as HistoryIcon, X, Activity } from 'lucide-react';
-import VideoPlayer, { FrameSnapshot } from './components/VideoPlayer';
-import AnalysisDashboard from './components/AnalysisDashboard';
-import { analyzeMovement, analyzeMultiFrameMovement } from './services/geminiService';
-import { poseDetectionService, PoseData } from './services/poseDetectionService';
-import { AnalysisStatus, AnalysisResponse } from './types';
-import { MultiFrameCapture } from './utils/fileUtils';
+import VideoPlayer, { FrameSnapshot } from '../components/VideoPlayer';
+import AnalysisDashboard from '../components/AnalysisDashboard';
+import { analyzeMovement, analyzeMultiFrameMovement } from '../services/geminiService';
+import { poseDetectionService, PoseData } from '../services/poseDetectionService';
+import { AnalysisStatus, AnalysisResponse } from '../types';
+import { MultiFrameCapture } from '../utils/fileUtils';
 
 // History Item Interface
 interface HistoryItem {
