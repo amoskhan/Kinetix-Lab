@@ -237,28 +237,28 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-900 text-slate-50 flex flex-col font-sans">
       {/* Navbar */}
-      <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-900/20">
-              <BrainCircuit className="text-white" size={24} />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-900/20">
+              <BrainCircuit className="text-white" size={20} />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-white">Kinetix<span className="text-blue-500">Lab</span></h1>
-              <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Video Analysis Suite</p>
+              <h1 className="text-base sm:text-xl font-bold tracking-tight text-white">Kinetix<span className="text-blue-500">Lab</span></h1>
+              <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase tracking-wider font-semibold hidden sm:block">Video Analysis Suite</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <button
               onClick={() => setShowHistory(!showHistory)}
-              className={`p-2 rounded-md transition-colors flex items-center gap-2 ${showHistory ? 'text-blue-400 bg-slate-800' : 'text-slate-400 hover:text-white'}`}
+              className={`p-2 rounded-md transition-colors flex items-center gap-1 sm:gap-2 ${showHistory ? 'text-blue-400 bg-slate-800' : 'text-slate-400 hover:text-white'}`}
               title="History"
             >
-              <HistoryIcon size={20} />
+              <HistoryIcon size={18} className="sm:w-5 sm:h-5" />
               <span className="hidden sm:inline text-sm font-medium">History</span>
             </button>
             <button
-              className="p-2 text-slate-400 hover:text-white transition-colors"
+              className="p-2 text-slate-400 hover:text-white transition-colors hidden sm:block"
               title="About"
             >
               <Info size={20} />
@@ -268,49 +268,57 @@ const App: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 relative">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 md:p-6 lg:p-8 relative">
 
         {/* History Sidebar Overlay (Mobile/Slide-in) */}
         {showHistory && (
-          <div className="absolute inset-y-0 right-0 z-40 w-80 bg-slate-800 border-l border-slate-700 shadow-2xl p-4 overflow-y-auto transform transition-transform">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-white">Analysis History</h2>
-              <button onClick={() => setShowHistory(false)} className="text-slate-400 hover:text-white"><X size={20} /></button>
-            </div>
-            <div className="space-y-4">
-              {history.length === 0 && <p className="text-slate-500 text-sm text-center py-8">No history yet.</p>}
-              {history.map(item => (
-                <div
-                  key={item.id}
-                  onClick={() => loadHistoryItem(item)}
-                  className="group p-3 bg-slate-900/50 rounded-lg border border-slate-700 hover:border-blue-500 cursor-pointer transition-all hover:bg-slate-800"
-                >
-                  <div className="flex gap-3">
-                    <div className="w-16 h-16 bg-black rounded-md overflow-hidden flex-shrink-0">
-                      <img src={item.thumbnail} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-medium text-white truncate">{item.result.feedback.movementName}</h4>
-                      <p className="text-xs text-blue-400 mb-1">{item.result.feedback.phaseDetected}</p>
-                      <p className="text-[10px] text-slate-500">{item.timestamp}</p>
+          <>
+            {/* Backdrop */}
+            <div 
+              className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+              onClick={() => setShowHistory(false)}
+            />
+            
+            <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-80 bg-slate-800 border-l border-slate-700 shadow-2xl p-4 overflow-y-auto transform transition-transform">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-semibold text-white">Analysis History</h2>
+                <button onClick={() => setShowHistory(false)} className="text-slate-400 hover:text-white"><X size={20} /></button>
+              </div>
+              <div className="space-y-4">
+                {history.length === 0 && <p className="text-slate-500 text-sm text-center py-8">No history yet.</p>}
+                {history.map(item => (
+                  <div
+                    key={item.id}
+                    onClick={() => loadHistoryItem(item)}
+                    className="group p-3 bg-slate-900/50 rounded-lg border border-slate-700 hover:border-blue-500 cursor-pointer transition-all hover:bg-slate-800"
+                  >
+                    <div className="flex gap-3">
+                      <div className="w-16 h-16 bg-black rounded-md overflow-hidden flex-shrink-0">
+                        <img src={item.thumbnail} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="History thumbnail" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-medium text-white truncate">{item.result.feedback.movementName}</h4>
+                        <p className="text-xs text-blue-400 mb-1">{item.result.feedback.phaseDetected}</p>
+                        <p className="text-[10px] text-slate-500">{item.timestamp}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          </>
         )}
 
         {/* Single Column Layout */}
         <div className="max-w-5xl mx-auto space-y-6">
           
           {/* Input Section */}
-          <div className="bg-slate-800/50 rounded-2xl border border-slate-700 p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Input Source</h2>
+          <div className="bg-slate-800/50 rounded-xl sm:rounded-2xl border border-slate-700 p-3 sm:p-4 md:p-6">
+            <h2 className="text-base sm:text-lg font-semibold text-white mb-3 sm:mb-4">Input Source</h2>
             
             {/* Movement Skill Input */}
-            <div className="mb-4">
-              <label htmlFor="movement-skill" className="block text-sm font-medium text-slate-300 mb-2">
+            <div className="mb-3 sm:mb-4">
+              <label htmlFor="movement-skill" className="block text-xs sm:text-sm font-medium text-slate-300 mb-2">
                 Movement Skill (Optional)
               </label>
               <input
@@ -319,9 +327,9 @@ const App: React.FC = () => {
                 value={userDeclaredSkill}
                 onChange={(e) => setUserDeclaredSkill(e.target.value)}
                 placeholder="e.g., Squat, Overhand Throw, Kick..."
-                className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               />
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="mt-2 text-[10px] sm:text-xs text-slate-500">
                 Specify the movement to guide the AI analysis. Leave blank for automatic detection.
               </p>
             </div>
@@ -335,7 +343,7 @@ const App: React.FC = () => {
             />
 
             {status === AnalysisStatus.ERROR && (
-              <div className="mt-4 p-4 bg-red-900/20 border border-red-800 rounded-lg text-red-200 text-sm">
+              <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-red-900/20 border border-red-800 rounded-lg text-red-200 text-xs sm:text-sm">
                 {errorMessage}
               </div>
             )}
@@ -343,28 +351,29 @@ const App: React.FC = () => {
 
           {/* Frame Snapshots Section */}
           {frameSnapshots.length > 0 && (
-            <div className="bg-slate-800/50 rounded-2xl border border-slate-700 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-white">Frame Snapshots ({frameSnapshots.length})</h2>
+            <div className="bg-slate-800/50 rounded-xl sm:rounded-2xl border border-slate-700 p-3 sm:p-4 md:p-6">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h2 className="text-base sm:text-lg font-semibold text-white">Frame Snapshots ({frameSnapshots.length})</h2>
                 <div className="flex gap-2">
                   <button
                     onClick={handleDownloadAllSnapshots}
-                    className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-1"
+                    className="text-[10px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-1"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
-                    Download All
+                    <span className="hidden sm:inline">Download All</span>
+                    <span className="sm:hidden">All</span>
                   </button>
                   <button
                     onClick={() => setFrameSnapshots([])}
-                    className="text-xs px-3 py-1.5 text-slate-400 hover:text-white transition-colors"
+                    className="text-[10px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5 text-slate-400 hover:text-white transition-colors"
                   >
                     Clear
                   </button>
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {frameSnapshots.map((snapshot, idx) => (
                   <div 
                     key={idx} 

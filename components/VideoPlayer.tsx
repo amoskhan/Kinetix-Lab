@@ -423,10 +423,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
       </div>
 
       {/* Controls */}
-      <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+      <div className="bg-slate-800 p-3 sm:p-4 rounded-xl border border-slate-700">
         {/* Scrubber */}
-        <div className="w-full flex items-center gap-3 text-xs text-slate-400 mb-3">
-          <span className="font-mono">{formatTime(currentTime)}</span>
+        <div className="w-full flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs text-slate-400 mb-3">
+          <span className="font-mono w-10 sm:w-12">{formatTime(currentTime)}</span>
           <input
             type="range"
             min="0"
@@ -440,50 +440,50 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
             }}
             className="flex-1 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
           />
-          <span className="font-mono">{formatTime(duration)}</span>
+          <span className="font-mono w-10 sm:w-12 text-right">{formatTime(duration)}</span>
         </div>
 
         {/* Control Buttons Row */}
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3">
           {/* Playback Controls */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 justify-center sm:justify-start">
             <button
               onClick={togglePlay}
               disabled={!videoSrc}
-              className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50 transition-colors"
+              className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50 transition-colors touch-manipulation"
               title={isPlaying ? "Pause" : "Play"}
             >
-              {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+              {isPlaying ? <Pause size={18} className="sm:w-5 sm:h-5" /> : <Play size={18} className="sm:w-5 sm:h-5" />}
             </button>
             <button
               onClick={() => {
                 if (videoRef.current) videoRef.current.currentTime = 0;
               }}
               disabled={!videoSrc}
-              className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50 transition-colors"
+              className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50 transition-colors touch-manipulation"
               title="Restart"
             >
-              <RotateCcw size={20} />
+              <RotateCcw size={18} className="sm:w-5 sm:h-5" />
             </button>
           </div>
 
           {/* Display Toggles */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 justify-center">
             <button
               onClick={() => setShowSkeleton(!showSkeleton)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+              className={`px-2 sm:px-3 py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-colors touch-manipulation ${
                 showSkeleton 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-slate-700 text-slate-400 hover:text-white'
               }`}
               title="Toggle Skeleton"
             >
-              <Activity size={16} className="inline mr-1" />
+              <Activity size={14} className="inline mr-1 sm:w-4 sm:h-4" />
               Skeleton
             </button>
             <button
               onClick={() => setShowAngles(!showAngles)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+              className={`px-2 sm:px-3 py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-colors touch-manipulation ${
                 showAngles 
                   ? 'bg-green-600 text-white' 
                   : 'bg-slate-700 text-slate-400 hover:text-white'
@@ -495,12 +495,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-2 items-center">
+          <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
             {/* Snapshot Controls */}
             <select
               value={snapshotCount}
               onChange={(e) => setSnapshotCount(Number(e.target.value))}
-              className="bg-slate-700 text-white text-xs px-2 py-2 rounded-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="bg-slate-700 text-white text-xs px-2 py-2 rounded-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-500 touch-manipulation"
               title="Number of snapshots"
             >
               <option value={3}>3 frames</option>
@@ -509,33 +509,36 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
               <option value={10}>10 frames</option>
             </select>
 
-            <button
-              onClick={handleMultiSnapshot}
-              disabled={!videoSrc || isCapturingSnapshots || isAnalyzing}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
-                isCapturingSnapshots || isAnalyzing
-                  ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                  : 'bg-purple-600 hover:bg-purple-500 text-white'
-              }`}
-              title="Capture multiple snapshots"
-            >
-              <Camera size={18} />
-              {isCapturingSnapshots ? 'Capturing...' : 'Snapshots'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleMultiSnapshot}
+                disabled={!videoSrc || isCapturingSnapshots || isAnalyzing}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all touch-manipulation ${
+                  isCapturingSnapshots || isAnalyzing
+                    ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                    : 'bg-purple-600 hover:bg-purple-500 text-white active:scale-95'
+                }`}
+                title="Capture multiple snapshots"
+              >
+                <Camera size={16} className="sm:w-[18px] sm:h-[18px]" />
+                <span className="hidden sm:inline">{isCapturingSnapshots ? 'Capturing...' : 'Snapshots'}</span>
+                <span className="sm:hidden">{isCapturingSnapshots ? 'Wait...' : 'Snap'}</span>
+              </button>
 
-            <button
-              onClick={handleCapture}
-              disabled={!videoSrc || isAnalyzing || isCapturingSnapshots}
-              className={`flex items-center gap-2 px-5 py-2 rounded-lg font-semibold transition-all ${
-                isAnalyzing || isCapturingSnapshots
-                  ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-900/20'
-              }`}
-              title="Analyze current frame"
-            >
-              <Camera size={20} />
-              {isAnalyzing ? 'Analyzing...' : 'Analyze'}
-            </button>
+              <button
+                onClick={handleCapture}
+                disabled={!videoSrc || isAnalyzing || isCapturingSnapshots}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all touch-manipulation ${
+                  isAnalyzing || isCapturingSnapshots
+                    ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-900/20 active:scale-95'
+                }`}
+                title="Analyze current frame"
+              >
+                <Camera size={18} className="sm:w-5 sm:h-5" />
+                {isAnalyzing ? 'Analyzing...' : 'Analyze'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
