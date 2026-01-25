@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { BrainCircuit, Info, History as HistoryIcon, X, Activity } from 'lucide-react';
-import VideoPlayer, { FrameSnapshot } from '../components/VideoPlayer';
-import AnalysisDashboard from '../components/AnalysisDashboard';
-import { analyzeMovement, analyzeMultiFrameMovement } from '../services/geminiService';
-import { poseDetectionService, PoseData } from '../services/poseDetectionService';
-import { AnalysisStatus, AnalysisResponse } from '../types';
-import { MultiFrameCapture } from '../utils/fileUtils';
+import VideoPlayer, { FrameSnapshot } from './components/VideoPlayer';
+import AnalysisDashboard from './components/AnalysisDashboard';
+import { analyzeMovement, analyzeMultiFrameMovement } from './services/gemini';
+import { poseDetectionService, PoseData } from './services/poseDetectionService';
+import { AnalysisStatus, AnalysisResponse } from './types';
+import { MultiFrameCapture } from './utils/fileUtils';
 
 // History Item Interface
 interface HistoryItem {
@@ -106,7 +106,7 @@ const App: React.FC = () => {
 
       let yOffset = 130;
       const columnWidth = canvas.width / 3;
-      
+
       snapshot.angles.forEach((angle, idx) => {
         const column = idx % 3;
         const row = Math.floor(idx / 3);
@@ -152,7 +152,7 @@ const App: React.FC = () => {
 
     try {
       console.log(`📸 Captured ${capture.frames.length} frames for analysis`);
-      
+
       // 1. If no pose provided, detect it from center frame
       let poseData = centerPose;
       if (!poseData) {
@@ -164,7 +164,7 @@ const App: React.FC = () => {
 
       if (poseData) {
         setCurrentPose(poseData);
-        
+
         // 2. Analyze pose geometry to detect movement type
         const analysis = poseDetectionService.analyzePoseGeometry(poseData);
         console.log("🎯 Local Detection:", analysis.detectedSkill);
@@ -274,11 +274,11 @@ const App: React.FC = () => {
         {showHistory && (
           <>
             {/* Backdrop */}
-            <div 
+            <div
               className="fixed inset-0 bg-black/60 z-40 lg:hidden"
               onClick={() => setShowHistory(false)}
             />
-            
+
             <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-80 bg-slate-800 border-l border-slate-700 shadow-2xl p-4 overflow-y-auto transform transition-transform">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-semibold text-white">Analysis History</h2>
@@ -311,11 +311,11 @@ const App: React.FC = () => {
 
         {/* Single Column Layout */}
         <div className="max-w-5xl mx-auto space-y-6">
-          
+
           {/* Input Section */}
           <div className="bg-slate-800/50 rounded-xl sm:rounded-2xl border border-slate-700 p-3 sm:p-4 md:p-6">
             <h2 className="text-base sm:text-lg font-semibold text-white mb-3 sm:mb-4">Input Source</h2>
-            
+
             {/* Movement Skill Input */}
             <div className="mb-3 sm:mb-4">
               <label htmlFor="movement-skill" className="block text-xs sm:text-sm font-medium text-slate-300 mb-2">
@@ -375,8 +375,8 @@ const App: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {frameSnapshots.map((snapshot, idx) => (
-                  <div 
-                    key={idx} 
+                  <div
+                    key={idx}
                     className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden hover:border-blue-500 transition-colors cursor-pointer group"
                     onClick={() => handleViewSnapshot(snapshot)}
                   >
@@ -429,11 +429,11 @@ const App: React.FC = () => {
 
           {/* Snapshot Modal */}
           {showSnapshotModal && selectedSnapshot && (
-            <div 
+            <div
               className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
               onClick={() => setShowSnapshotModal(false)}
             >
-              <div 
+              <div
                 className="bg-slate-800 rounded-2xl border border-slate-700 max-w-5xl w-full max-h-[90vh] overflow-auto"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -468,9 +468,9 @@ const App: React.FC = () => {
                     {/* Image */}
                     <div className="lg:col-span-2">
                       <div className="bg-black rounded-lg overflow-hidden">
-                        <img 
-                          src={selectedSnapshot.frameImage} 
-                          alt="Frame snapshot" 
+                        <img
+                          src={selectedSnapshot.frameImage}
+                          alt="Frame snapshot"
                           className="w-full h-auto"
                         />
                       </div>
@@ -509,7 +509,7 @@ const App: React.FC = () => {
                 </div>
                 <h3 className="text-xl font-semibold text-white mb-2">Ready to Analyze</h3>
                 <p className="text-slate-400 max-w-md mb-6">
-                  Upload a video of any movement or exercise. KinetixLab will identify the movement, 
+                  Upload a video of any movement or exercise. KinetixLab will identify the movement,
                   measure joint angles, and provide objective biomechanical analysis.
                 </p>
                 <div className="flex gap-4 text-xs text-slate-500 uppercase tracking-widest font-semibold">

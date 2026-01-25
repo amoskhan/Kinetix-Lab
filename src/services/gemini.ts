@@ -1,6 +1,5 @@
-
 import { GoogleGenAI, Schema, Type } from "@google/genai";
-import { AnalysisResponse, AnalysisStatus } from "../types";
+import { AnalysisResponse } from "../types";
 import { PoseData, poseDetectionService } from './poseDetectionService';
 
 const MODEL_NAME = 'gemini-2.5-flash'; // Updated to latest experimental model
