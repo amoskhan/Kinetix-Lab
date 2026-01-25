@@ -1,10 +1,11 @@
-import { GoogleGenAI, Schema, Type } from "@google/genai";
+
 import { AnalysisResponse } from "../types";
 import { PoseData, poseDetectionService } from './poseDetectionService';
 
-const MODEL_NAME = 'gemini-2.5-flash'; // Updated to latest experimental model
+// Define the schema types for local use/reference if needed, 
+// but for the client we just pass the schema to the server.
+import { Type, Schema } from "@google/genai";
 
-// Define the comprehensive schema for the "Step-by-Step" Dashboard
 const responseSchema: Schema = {
   type: Type.OBJECT,
   properties: {
@@ -14,8 +15,6 @@ const responseSchema: Schema = {
         movementName: { type: Type.STRING, description: "Name of the identified exercise or movement." },
         confidence: { type: Type.NUMBER, description: "Confidence score 0-100." },
         phaseDetected: { type: Type.STRING, description: "Current phase (e.g., 'Wind-up', 'Force Generation', 'Follow-through')." },
-
-        // Detailed Step-by-Step Walkthrough
         steps: {
           type: Type.ARRAY,
           description: "Step-by-step breakdown of the movement for user verification.",
@@ -30,7 +29,6 @@ const responseSchema: Schema = {
             required: ["stepName", "status", "observation"]
           }
         },
-
         jointAngles: {
           type: Type.ARRAY,
           items: {
@@ -43,7 +41,6 @@ const responseSchema: Schema = {
             }
           }
         },
-
         observations: {
           type: Type.ARRAY,
           items: { type: Type.STRING },
@@ -62,8 +59,7 @@ const responseSchema: Schema = {
   required: ["feedback"]
 };
 
-// Construct the "Brain" System Instruction
-// Objective biomechanics analysis without external standards
+// System Instruction
 const SYSTEM_INSTRUCTION = `
 You are an expert biomechanics analyst for KinetixLab.
 
@@ -108,17 +104,52 @@ export interface MultiFrameAnalysisInput {
   userDeclaredSkill?: string;
 }
 
+// Internal helper to call the API
+async function callGeminiApi(
+  parts: any[],
+  systemInstruction: string,
+  schema: any,
+  thinkingBudget?: number
+): Promise<AnalysisResponse> {
+
+  // Check if we are in dev mode (localhost) or production
+  // If localhost, the user needs to run a local backend or proxy.
+  // Assuming standard Vercel layout `/api/gemini`.
+
+  const response = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      parts,
+      systemInstruction,
+      responseSchema: schema,
+      generationConfig: {
+        thinkingConfig: thinkingBudget ? { thinkingBudget } : undefined
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Server Error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (!data.text) {
+    throw new Error("No response text from API");
+  }
+
+  // Parse the inner JSON string returned by Gemini
+  return JSON.parse(data.text) as AnalysisResponse;
+}
+
 export const analyzeMovement = async (
   base64Image: string,
   poseData?: PoseData,
   userDeclaredSkill?: string
 ): Promise<AnalysisResponse> => {
-
-  if (!import.meta.env.VITE_GEMINI_API_KEY) {
-    throw new Error("VITE_GEMINI_API_KEY is missing from environment variables.");
-  }
-
-  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
   try {
     // Enhance prompt with Pose Data if available
@@ -149,39 +180,24 @@ export const analyzeMovement = async (
     Provide a detailed biomechanical analysis in JSON format.
     `;
 
-    // Ensure base64Image is raw data, strip prefix if exists (e.g. data:image/jpeg;base64,)
+    // Ensure base64Image is raw data
     const cleanBase64 = base64Image.includes(',')
       ? base64Image.split(',')[1]
       : base64Image;
 
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: 'image/jpeg',
-              data: cleanBase64
-            }
-          },
-          {
-            text: promptText
-          }
-        ]
+    const parts = [
+      {
+        inlineData: {
+          mimeType: 'image/jpeg',
+          data: cleanBase64
+        }
       },
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        responseMimeType: "application/json",
-        responseSchema: responseSchema,
-        thinkingConfig: { thinkingBudget: 1024 }
+      {
+        text: promptText
       }
-    });
+    ];
 
-    const textResponse = response.text;
-    if (!textResponse) throw new Error("No response text from Gemini.");
-
-    const parsedData = JSON.parse(textResponse) as AnalysisResponse;
-    return parsedData;
+    return await callGeminiApi(parts, SYSTEM_INSTRUCTION, responseSchema, 1024);
 
   } catch (error) {
     console.error("Gemini Analysis Error:", error);
@@ -192,12 +208,6 @@ export const analyzeMovement = async (
 export const analyzeMultiFrameMovement = async (
   input: MultiFrameAnalysisInput
 ): Promise<AnalysisResponse> => {
-
-  if (!import.meta.env.VITE_GEMINI_API_KEY) {
-    throw new Error("VITE_GEMINI_API_KEY is missing from environment variables.");
-  }
-
-  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
   try {
     // Build pose context
@@ -216,11 +226,11 @@ export const analyzeMultiFrameMovement = async (
       **POSE SUMMARY:**
       ${analysis.poseSummary}
       
-      ${input.userDeclaredSkill 
-        ? `**USER DECLARED MOVEMENT:** "${input.userDeclaredSkill}"\nThis is what the user claims they are performing. Verify and analyze accordingly.`
-        : input.detectedMovement && input.detectedMovement !== "Unknown Movement" 
-          ? `**LOCAL DETECTION SUGGESTS:** ${input.detectedMovement} (Confidence: Medium)\nPlease verify this classification.` 
-          : ''}
+      ${input.userDeclaredSkill
+          ? `**USER DECLARED MOVEMENT:** "${input.userDeclaredSkill}"\nThis is what the user claims they are performing. Verify and analyze accordingly.`
+          : input.detectedMovement && input.detectedMovement !== "Unknown Movement"
+            ? `**LOCAL DETECTION SUGGESTS:** ${input.detectedMovement} (Confidence: Medium)\nPlease verify this classification.`
+            : ''}
       `;
     }
 
@@ -235,10 +245,10 @@ export const analyzeMultiFrameMovement = async (
     ${poseContext}
     
     **CRITICAL INSTRUCTIONS:**
-    ${input.userDeclaredSkill 
-      ? `1. The user has declared this movement as "${input.userDeclaredSkill}". Analyze it as this movement type and verify correctness.
+    ${input.userDeclaredSkill
+        ? `1. The user has declared this movement as "${input.userDeclaredSkill}". Analyze it as this movement type and verify correctness.
     2. If the visual evidence contradicts the declared movement, note this in your analysis but still provide feedback for the declared movement.`
-      : `1. First, identify the movement type by observing the progression across all 3 frames.`}
+        : `1. First, identify the movement type by observing the progression across all 3 frames.`}
     2. Use the temporal context to understand the movement phase (preparation, execution, follow-through)
     3. Focus your detailed analysis on Frame 2 (the key frame)
     4. Reference Frames 1 and 3 to validate movement direction and technique
@@ -248,7 +258,7 @@ export const analyzeMultiFrameMovement = async (
     `;
 
     // Prepare image parts for all frames
-    const imageParts = input.frames.map(frame => {
+    const frameParts = input.frames.map(frame => {
       const cleanBase64 = frame.includes(',') ? frame.split(',')[1] : frame;
       return {
         inlineData: {
@@ -258,27 +268,12 @@ export const analyzeMultiFrameMovement = async (
       };
     });
 
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: {
-        parts: [
-          ...imageParts,
-          { text: promptText }
-        ]
-      },
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        responseMimeType: "application/json",
-        responseSchema: responseSchema,
-        thinkingConfig: { thinkingBudget: 2048 } // Increased for multi-frame analysis
-      }
-    });
+    const parts = [
+      ...frameParts,
+      { text: promptText }
+    ];
 
-    const textResponse = response.text;
-    if (!textResponse) throw new Error("No response text from Gemini.");
-
-    const parsedData = JSON.parse(textResponse) as AnalysisResponse;
-    return parsedData;
+    return await callGeminiApi(parts, SYSTEM_INSTRUCTION, responseSchema, 2048);
 
   } catch (error) {
     console.error("Gemini Multi-Frame Analysis Error:", error);
@@ -286,5 +281,5 @@ export const analyzeMultiFrameMovement = async (
   }
 };
 
-// Deprecated alias for backward compatibility if needed, but we should use analyzeMovement
+// Deprecated alias for backward compatibility
 export const analyzeFrame = analyzeMovement;
