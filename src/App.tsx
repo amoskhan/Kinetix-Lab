@@ -6,13 +6,14 @@ import { analyzeMovement, analyzeMultiFrameMovement } from './services/gemini';
 import { poseDetectionService, PoseData } from './services/poseDetectionService';
 import { AnalysisStatus, AnalysisResponse } from './types';
 import { MultiFrameCapture } from './utils/fileUtils';
+import { saveAnalysis, getAnalysisHistory, AnalysisRecord } from './lib/supabase';
+import PDFExportButton from './components/PDFExportButton';
 
 // History Item Interface
-interface HistoryItem {
-  id: string;
-  thumbnail: string;
-  timestamp: string;
-  result: AnalysisResponse;
+interface HistoryItem extends AnalysisRecord {
+  thumbnail?: string;
+  // Supabase returns these:
+  created_at?: string;
 }
 
 const App: React.FC = () => {
@@ -29,32 +30,50 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
-  // Load History from LocalStorage on mount
+  const [analysisRef] = useState<React.RefObject<HTMLDivElement>>(React.createRef());
+
+  // Load History from Supabase on mount
   useEffect(() => {
-    const saved = localStorage.getItem('analysis_history');
-    if (saved) {
+    const fetchHistory = async () => {
       try {
-        setHistory(JSON.parse(saved));
+        const data = await getAnalysisHistory();
+        if (data) {
+          setHistory(data as HistoryItem[]);
+        }
       } catch (e) {
-        console.error("Failed to load history", e);
+        console.error("Failed to load history from Supabase", e);
       }
-    }
+    };
+    fetchHistory();
   }, []);
 
-  const saveToHistory = (result: AnalysisResponse, thumbnail: string) => {
-    const newItem: HistoryItem = {
-      id: Date.now().toString(),
-      thumbnail, // We'll use the analyzed frame as thumbnail
-      timestamp: new Date().toLocaleString(),
-      result
+  const saveToHistory = async (result: AnalysisResponse, thumbnail: string) => {
+    const record: AnalysisRecord = {
+      movement_name: result.feedback.movementName,
+      confidence: result.feedback.confidence,
+      analysis_data: result,
+      video_url: thumbnail, // Storing base64 as video_url for now (not ideal for DB size but works for demo)
     };
-    const updatedHistory = [newItem, ...history];
-    setHistory(updatedHistory);
-    localStorage.setItem('analysis_history', JSON.stringify(updatedHistory));
+
+    try {
+      const savedData = await saveAnalysis(record);
+      if (savedData) {
+        const newItem: HistoryItem = {
+          ...record,
+          created_at: new Date().toISOString(),
+          id: savedData[0].id
+        };
+        setHistory([newItem, ...history]);
+      }
+    } catch (error) {
+      console.error("Failed to save to Supabase", error);
+    }
   };
 
   const loadHistoryItem = (item: HistoryItem) => {
-    setAnalysisResult(item.result);
+    // If getting from DB, the structure might be different or `result` might be inside `analysis_data`
+    // Based on our type definition: item.analysis_data IS the AnalysisResponse
+    setAnalysisResult(item.analysis_data);
     setStatus(AnalysisStatus.COMPLETE);
     setShowHistory(false);
   };
@@ -294,12 +313,13 @@ const App: React.FC = () => {
                   >
                     <div className="flex gap-3">
                       <div className="w-16 h-16 bg-black rounded-md overflow-hidden flex-shrink-0">
-                        <img src={item.thumbnail} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="History thumbnail" />
+                        {/* Use video_url as image source if available - note: storing large base64 strings in DB is not recommended for production but used here for MVP */}
+                        <img src={item.video_url || item.thumbnail || ""} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="History thumbnail" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-medium text-white truncate">{item.result.feedback.movementName}</h4>
-                        <p className="text-xs text-blue-400 mb-1">{item.result.feedback.phaseDetected}</p>
-                        <p className="text-[10px] text-slate-500">{item.timestamp}</p>
+                        <h4 className="text-sm font-medium text-white truncate">{item.movement_name || "Movement"}</h4>
+                        <p className="text-xs text-blue-400 mb-1">{item.analysis_data?.feedback?.phaseDetected}</p>
+                        <p className="text-[10px] text-slate-500">{item.created_at ? new Date(item.created_at).toLocaleString() : ''}</p>
                       </div>
                     </div>
                   </div>
@@ -538,7 +558,10 @@ const App: React.FC = () => {
           )}
 
           {status === AnalysisStatus.COMPLETE && analysisResult && (
-            <div className="bg-slate-800/50 rounded-2xl border border-slate-700 p-6">
+            <div className="bg-slate-800/50 rounded-2xl border border-slate-700 p-6" ref={analysisRef}>
+              <div className="flex justify-end mb-4">
+                <PDFExportButton analysisData={analysisResult} analysisRef={analysisRef} />
+              </div>
               <AnalysisDashboard data={analysisResult.feedback} />
             </div>
           )}

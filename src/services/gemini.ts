@@ -4,7 +4,7 @@ import { PoseData, poseDetectionService } from './poseDetectionService';
 
 // Define the schema types for local use/reference if needed, 
 // but for the client we just pass the schema to the server.
-import { Type, Schema } from "@google/genai";
+import { Type, Schema, GoogleGenAI } from "@google/genai";
 
 const responseSchema: Schema = {
   type: Type.OBJECT,
@@ -113,9 +113,41 @@ async function callGeminiApi(
 ): Promise<AnalysisResponse> {
 
   // Check if we are in dev mode (localhost) or production
-  // If localhost, the user needs to run a local backend or proxy.
-  // Assuming standard Vercel layout `/api/gemini`.
+  if (import.meta.env.DEV) {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("Missing VITE_GEMINI_API_KEY in .env");
+      throw new Error("Missing API Key for local development");
+    }
 
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: {
+          parts: parts
+        },
+        config: {
+          systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema: schema,
+          thinkingConfig: thinkingBudget ? { thinkingBudget } : undefined
+        }
+      });
+
+      const textResponse = response.text;
+      if (!textResponse) {
+        throw new Error("No response text from Gemini API");
+      }
+      return JSON.parse(textResponse) as AnalysisResponse;
+
+    } catch (error: any) {
+      console.error("Gemini Client SDK Error:", error);
+      throw new Error(error.message || "Gemini Client Error");
+    }
+  }
+
+  // Production: Use the serverless function
   const response = await fetch('/api/gemini', {
     method: 'POST',
     headers: {
