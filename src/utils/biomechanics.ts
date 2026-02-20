@@ -46,7 +46,8 @@ export const analyzeSymmetry = (landmarks: Landmark[]) => {
 // 3. Calculate All Major Joint Angles
 export const calculateAllJointAngles = (landmarks: Landmark[]): { joint: string; angle: number }[] => {
     // Check visibility threshold first
-    const isVisible = (l: Landmark) => l && l.visibility !== undefined && l.visibility > 0.5;
+    // we use a relaxed 0.25 (vs 0.5) to allow side-view "best guesses" to be visible
+    const isVisible = (l: Landmark) => l && l.visibility !== undefined && l.visibility > 0.25;
 
     const angles: { joint: string; angle: number }[] = [];
 

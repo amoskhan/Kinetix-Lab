@@ -380,6 +380,9 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
             if (showAngles) {
               drawAnglesOnCanvas(ctx, livePose, angs, canvas.width, canvas.height);
             }
+
+            // Draw Data HUD
+            drawJointAngleStats(ctx, angs, canvas.width, canvas.height);
           } else {
             setCurrentAngles([]);
             if (onPoseUpdate) {
