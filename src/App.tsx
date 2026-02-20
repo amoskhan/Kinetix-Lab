@@ -309,6 +309,11 @@ const App: React.FC = () => {
         userDeclaredSkill
       });
 
+      // Inject User Prompt for Storage
+      if (userDeclaredSkill) {
+        result.user_prompt = userDeclaredSkill;
+      }
+
       // Inject captured frames into the result for display
       if (result && result.feedback) {
         // Collect frames from all views

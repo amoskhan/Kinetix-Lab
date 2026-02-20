@@ -34,6 +34,7 @@ export interface BiomechanicalFeedback {
 
 export interface AnalysisResponse {
   feedback: BiomechanicalFeedback;
+  user_prompt?: string; // Captured user input for storage
 }
 
 export interface AnalysisRecord {
