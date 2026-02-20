@@ -2,6 +2,16 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, Schema, Type } from "@google/genai";
 
+// Increase body size limit so large multi-frame payloads (dual-view) don't get rejected
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '20mb',
+    },
+  },
+};
+
+
 const MODEL_NAME = 'gemini-2.5-flash';
 
 export default async function handler(

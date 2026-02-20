@@ -35,7 +35,9 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ setViewMode, setCaptureWindow
                     <button
                         onClick={() => {
                             setViewMode('dual');
-                            setCaptureWindow(10); // Default to 10 frames for Dual View
+                            // On mobile use 5 frames (vs 10) to keep payloads manageable
+                            const isMobile = window.innerWidth <= 768 || ('ontouchstart' in window);
+                            setCaptureWindow(isMobile ? 5 : 10);
                         }}
                         className="group p-6 bg-slate-900 border border-slate-700 rounded-xl hover:border-purple-500 hover:bg-slate-800 transition-all text-left relative overflow-hidden"
                     >

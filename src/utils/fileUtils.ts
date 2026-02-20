@@ -1,16 +1,27 @@
-export const captureVideoFrame = (videoElement: HTMLVideoElement): string | null => {
-  const canvas = document.createElement('canvas');
-  canvas.width = videoElement.videoWidth;
-  canvas.height = videoElement.videoHeight;
-  const ctx = canvas.getContext('2d');
+// Detect mobile to cap resolution and reduce payload size
+const isMobile = () => window.innerWidth <= 768 || ('ontouchstart' in window);
 
+// Max width for captured frames — prevents giant payloads on mobile
+const MAX_FRAME_WIDTH = isMobile() ? 960 : 1280;
+// JPEG quality — lower on mobile to keep payload small
+const JPEG_QUALITY = isMobile() ? 0.65 : 0.8;
+
+export const captureVideoFrame = (videoElement: HTMLVideoElement): string | null => {
+  const srcW = videoElement.videoWidth;
+  const srcH = videoElement.videoHeight;
+  if (!srcW || !srcH) return null;
+
+  // Scale down if needed
+  const scale = Math.min(1, MAX_FRAME_WIDTH / srcW);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(srcW * scale);
+  canvas.height = Math.round(srcH * scale);
+
+  const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
   ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-
-  // Get base64 string
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-  return dataUrl;
+  return canvas.toDataURL('image/jpeg', JPEG_QUALITY);
 };
 
 export interface MultiFrameCapture {
@@ -78,18 +89,22 @@ export const captureMultipleFrames = async (
 
     if (onFrame) {
       // Create a temporary canvas for this frame to allow drawing
+      // Apply mobile resolution cap
+      const srcW = videoElement.videoWidth;
+      const srcH = videoElement.videoHeight;
+      const scale = Math.min(1, MAX_FRAME_WIDTH / srcW);
       const canvas = document.createElement('canvas');
-      canvas.width = videoElement.videoWidth;
-      canvas.height = videoElement.videoHeight;
+      canvas.width = Math.round(srcW * scale);
+      canvas.height = Math.round(srcH * scale);
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
         await onFrame(ctx, time);
-        frames.push(canvas.toDataURL('image/jpeg', 0.8));
+        frames.push(canvas.toDataURL('image/jpeg', JPEG_QUALITY));
         timestamps.push(time);
       }
     } else {
-      // Standard capture
+      // Standard capture (already uses captureVideoFrame which applies the cap)
       const frame = captureVideoFrame(videoElement);
       if (frame) {
         frames.push(frame);
