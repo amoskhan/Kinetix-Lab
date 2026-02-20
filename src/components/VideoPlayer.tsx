@@ -193,12 +193,18 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
 
     // Define joint positions for angle labels
     const jointPositions: { [key: string]: { x: number; y: number } } = {
-      'Right Elbow': landmarks[13],
-      'Left Elbow': landmarks[14],
-      'Right Knee': landmarks[25],
-      'Left Knee': landmarks[26],
-      'Right Shoulder': landmarks[11],
-      'Left Shoulder': landmarks[12]
+      'Left Shoulder': landmarks[11],
+      'Right Shoulder': landmarks[12],
+      'Left Elbow': landmarks[13],
+      'Right Elbow': landmarks[14],
+      'Left Wrist': landmarks[15],
+      'Right Wrist': landmarks[16],
+      'Left Hip': landmarks[23],
+      'Right Hip': landmarks[24],
+      'Left Knee': landmarks[25],
+      'Right Knee': landmarks[26],
+      'Left Ankle': landmarks[27],
+      'Right Ankle': landmarks[28]
     };
 
     angles.forEach(({ joint, angle }) => {
