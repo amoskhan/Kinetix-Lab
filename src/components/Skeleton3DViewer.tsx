@@ -133,7 +133,8 @@ interface Skeleton3DViewerProps {
     worldLandmarks: NormalizedLandmark[] | null | undefined;
 }
 
-const Skeleton3DViewer: React.FC<Skeleton3DViewerProps> = ({ worldLandmarks }) => {
+export default function Skeleton3DViewer({ worldLandmarks }: Skeleton3DViewerProps) {
+    console.log("Rendering Skeleton3DViewer", !!worldLandmarks);
     const hasPose = worldLandmarks && worldLandmarks.length > 0;
 
     return (
@@ -197,6 +198,5 @@ const Skeleton3DViewer: React.FC<Skeleton3DViewerProps> = ({ worldLandmarks }) =
             </Canvas>
         </div>
     );
-};
+}
 
-export default Skeleton3DViewer;
