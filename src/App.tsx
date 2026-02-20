@@ -393,14 +393,14 @@ const App: React.FC = () => {
               <div className={`grid gap-6 ${viewMode === 'dual' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
                 {/* Player 1: Main/Front */}
                 <VideoPlayer
-                  ref={(el) => playerRefs.current[viewMode === 'single' ? 'main' : 'front'] = el}
+                  ref={(el) => { playerRefs.current[viewMode === 'single' ? 'main' : 'front'] = el; }}
                   label={viewMode === 'single' ? "Main Video" : "Front View"}
                 />
 
                 {/* Player 2: Side (Only in Dual Mode) */}
                 {viewMode === 'dual' && (
                   <VideoPlayer
-                    ref={(el) => playerRefs.current['side'] = el}
+                    ref={(el) => { playerRefs.current['side'] = el; }}
                     label="Side View"
                   />
                 )}

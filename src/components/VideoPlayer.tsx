@@ -1,8 +1,10 @@
 import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
-import { Upload, Play, Pause, Maximize, Minimize, Activity } from 'lucide-react';
+import { Upload, Play, Pause, Maximize, Minimize, Activity, Box } from 'lucide-react';
 import { captureVideoFrame, captureMultipleFrames, MultiFrameCapture } from '../utils/fileUtils';
 import { PoseData, poseDetectionService } from '../services/poseDetectionService';
 import { getCenterOfMass, analyzeSymmetry, calculateAllJointAngles, formatTelemetryForPrompt, drawJointAngleStats } from '../utils/biomechanics';
+import Skeleton3DViewer from './Skeleton3DViewer';
+import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
 
 // Define the handle interface for the parent to communicate with
 export interface VideoPlayerHandle {
@@ -38,9 +40,13 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
   const [duration, setDuration] = useState(0);
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [showAngles, setShowAngles] = useState(true);
+  const [show3D, setShow3D] = useState(false);
   const [currentAngles, setCurrentAngles] = useState<{ joint: string; angle: number }[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [canvasStyle, setCanvasStyle] = useState<React.CSSProperties>({});
+  // Stores the latest world landmarks for the 3D viewer
+  const latestWorldLandmarksRef = useRef<NormalizedLandmark[] | null>(null);
+  const [worldLandmarksForViewer, setWorldLandmarksForViewer] = useState<NormalizedLandmark[] | null>(null);
 
   // --- Expose Methods via Ref ---
   useImperativeHandle(ref, () => ({
@@ -338,6 +344,12 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
             // Format for AI & Store
             latestTelemetryRef.current = formatTelemetryForPrompt(angs, symmetry);
 
+            // Store world landmarks for 3D viewer (throttled to avoid excessive re-renders)
+            if (show3D && livePose.worldLandmarks) {
+              latestWorldLandmarksRef.current = livePose.worldLandmarks;
+              setWorldLandmarksForViewer([...livePose.worldLandmarks]);
+            }
+
             // Draw CoM (Plumb Line)
             if (com) {
               ctx.beginPath();
@@ -468,6 +480,11 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
             const symmetry = analyzeSymmetry(landmarks);
             const angs = calculateAllJointAngles(landmarks);
             latestTelemetryRef.current = formatTelemetryForPrompt(angs, symmetry);
+
+            // Update 3D viewer during scrubbing
+            if (show3D && livePose.worldLandmarks) {
+              setWorldLandmarksForViewer([...livePose.worldLandmarks]);
+            }
 
             // Draw CoM
             if (com) {
@@ -673,7 +690,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
           </div>
 
           {/* Display Toggles */}
-          <div className="flex gap-2 justify-center">
+          <div className="flex gap-2 justify-center flex-wrap">
             <button
               onClick={() => setShowSkeleton(!showSkeleton)}
               className={`px-2 sm:px-3 py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-colors touch-manipulation ${showSkeleton
@@ -695,9 +712,28 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
             >
               ° Angles
             </button>
+            <button
+              onClick={() => setShow3D(!show3D)}
+              className={`px-2 sm:px-3 py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-colors touch-manipulation flex items-center gap-1 ${show3D
+                ? 'bg-purple-600 text-white'
+                : 'bg-slate-700 text-slate-400 hover:text-white'
+                }`}
+              title="Toggle 3D Skeleton View"
+            >
+              <Box size={13} className="sm:w-4 sm:h-4" />
+              3D View
+            </button>
           </div>
         </div>
       </div>
+
+      {/* 3D Skeleton Viewer Panel */}
+      {show3D && (
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <Skeleton3DViewer worldLandmarks={worldLandmarksForViewer} />
+        </div>
+      )}
+
     </div>
   );
 });
