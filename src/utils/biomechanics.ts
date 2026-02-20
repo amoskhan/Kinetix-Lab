@@ -50,6 +50,17 @@ export const calculateAllJointAngles = (landmarks: Landmark[]): { joint: string;
 
     const angles: { joint: string; angle: number }[] = [];
 
+    // --- UPPER BODY ---
+
+    // Left Shoulder (Hip -> Shoulder -> Elbow)
+    if (isVisible(landmarks[23]) && isVisible(landmarks[11]) && isVisible(landmarks[13])) {
+        angles.push({ joint: 'Left Shoulder', angle: Math.round(calculateAngle(landmarks[23], landmarks[11], landmarks[13])) });
+    }
+    // Right Shoulder (Hip -> Shoulder -> Elbow)
+    if (isVisible(landmarks[24]) && isVisible(landmarks[12]) && isVisible(landmarks[14])) {
+        angles.push({ joint: 'Right Shoulder', angle: Math.round(calculateAngle(landmarks[24], landmarks[12], landmarks[14])) });
+    }
+
     // Left Elbow (Shoulder -> Elbow -> Wrist)
     if (isVisible(landmarks[11]) && isVisible(landmarks[13]) && isVisible(landmarks[15])) {
         angles.push({ joint: 'Left Elbow', angle: Math.round(calculateAngle(landmarks[11], landmarks[13], landmarks[15])) });
@@ -57,6 +68,26 @@ export const calculateAllJointAngles = (landmarks: Landmark[]): { joint: string;
     // Right Elbow (Shoulder -> Elbow -> Wrist)
     if (isVisible(landmarks[12]) && isVisible(landmarks[14]) && isVisible(landmarks[16])) {
         angles.push({ joint: 'Right Elbow', angle: Math.round(calculateAngle(landmarks[12], landmarks[14], landmarks[16])) });
+    }
+
+    // Left Wrist (Elbow -> Wrist -> Index) - Approx for wrist flexion/extension alignment
+    if (isVisible(landmarks[13]) && isVisible(landmarks[15]) && isVisible(landmarks[19])) {
+        angles.push({ joint: 'Left Wrist', angle: Math.round(calculateAngle(landmarks[13], landmarks[15], landmarks[19])) });
+    }
+    // Right Wrist (Elbow -> Wrist -> Index)
+    if (isVisible(landmarks[14]) && isVisible(landmarks[16]) && isVisible(landmarks[20])) {
+        angles.push({ joint: 'Right Wrist', angle: Math.round(calculateAngle(landmarks[14], landmarks[16], landmarks[20])) });
+    }
+
+    // --- LOWER BODY ---
+
+    // Left Hip (Shoulder -> Hip -> Knee)
+    if (isVisible(landmarks[11]) && isVisible(landmarks[23]) && isVisible(landmarks[25])) {
+        angles.push({ joint: 'Left Hip', angle: Math.round(calculateAngle(landmarks[11], landmarks[23], landmarks[25])) });
+    }
+    // Right Hip (Shoulder -> Hip -> Knee)
+    if (isVisible(landmarks[12]) && isVisible(landmarks[24]) && isVisible(landmarks[26])) {
+        angles.push({ joint: 'Right Hip', angle: Math.round(calculateAngle(landmarks[12], landmarks[24], landmarks[26])) });
     }
 
     // Left Knee (Hip -> Knee -> Ankle)
@@ -68,24 +99,13 @@ export const calculateAllJointAngles = (landmarks: Landmark[]): { joint: string;
         angles.push({ joint: 'Right Knee', angle: Math.round(calculateAngle(landmarks[24], landmarks[26], landmarks[28])) });
     }
 
-    // Right Hip (Shoulder -> Hip -> Knee)
-    if (isVisible(landmarks[12]) && isVisible(landmarks[24]) && isVisible(landmarks[26])) {
-        angles.push({ joint: 'Right Hip', angle: Math.round(calculateAngle(landmarks[12], landmarks[24], landmarks[26])) });
+    // Left Ankle (Knee -> Ankle -> Foot Index) - Approx for dorsiflexion
+    if (isVisible(landmarks[25]) && isVisible(landmarks[27]) && isVisible(landmarks[31])) {
+        angles.push({ joint: 'Left Ankle', angle: Math.round(calculateAngle(landmarks[25], landmarks[27], landmarks[31])) });
     }
-
-    // Left Hip (Shoulder -> Hip -> Knee)
-    if (isVisible(landmarks[11]) && isVisible(landmarks[23]) && isVisible(landmarks[25])) {
-        angles.push({ joint: 'Left Hip', angle: Math.round(calculateAngle(landmarks[11], landmarks[23], landmarks[25])) });
-    }
-
-    // Left Shoulder (Hip -> Shoulder -> Elbow)
-    if (isVisible(landmarks[23]) && isVisible(landmarks[11]) && isVisible(landmarks[13])) {
-        angles.push({ joint: 'Left Shoulder', angle: Math.round(calculateAngle(landmarks[23], landmarks[11], landmarks[13])) });
-    }
-
-    // Right Shoulder (Hip -> Shoulder -> Elbow)
-    if (isVisible(landmarks[24]) && isVisible(landmarks[12]) && isVisible(landmarks[14])) {
-        angles.push({ joint: 'Right Shoulder', angle: Math.round(calculateAngle(landmarks[24], landmarks[12], landmarks[14])) });
+    // Right Ankle (Knee -> Ankle -> Foot Index)
+    if (isVisible(landmarks[26]) && isVisible(landmarks[28]) && isVisible(landmarks[32])) {
+        angles.push({ joint: 'Right Ankle', angle: Math.round(calculateAngle(landmarks[26], landmarks[28], landmarks[32])) });
     }
 
     return angles;
@@ -96,10 +116,19 @@ export const formatTelemetryForPrompt = (angles: { joint: string; angle: number 
     let telemetryString = `\n--- LIVE BIOMECHANICS TELEMETRY ---\n`;
 
     telemetryString += `- Symmetry: Shoulders are ${symmetry.shouldersLevel ? 'LEVEL' : 'TILTED'}. Hips are ${symmetry.hipsLevel ? 'LEVEL' : 'TILTED'}.\n`;
+    telemetryString += `- Tilted Angles: Shoulder Tilt ~${(symmetry.shoulderTiltRaw * 100).toFixed(1)}%, Hip Tilt ~${(symmetry.hipTiltRaw * 100).toFixed(1)}%\n`;
 
-    telemetryString += `- Joint Angles: \n`;
-    angles.forEach(({ joint, angle }) => {
-        telemetryString += `  * ${joint}: ${angle}°\n`;
+    telemetryString += `- Joint Angles (Degrees):\n`;
+
+    // Group by Joint Type for cleaner reading
+    const joints = ['Shoulder', 'Elbow', 'Wrist', 'Hip', 'Knee', 'Ankle'];
+    joints.forEach(joint => {
+        const left = angles.find(a => a.joint === `Left ${joint}`)?.angle;
+        const right = angles.find(a => a.joint === `Right ${joint}`)?.angle;
+
+        if (left !== undefined || right !== undefined) {
+            telemetryString += `  * ${joint}: L=${left ?? 'N/A'}° | R=${right ?? 'N/A'}°\n`;
+        }
     });
 
     telemetryString += `\nUse this exact mathematical data to verify the posture in the image. Do not guess joint angles visually if they are provided here.`;
@@ -107,7 +136,7 @@ export const formatTelemetryForPrompt = (angles: { joint: string; angle: number 
     return telemetryString;
 };
 
-// 5. Draw Joint Angles Data Box (Overlay)
+// 5. Draw Joint Angles Data HUD (Overlay)
 export const drawJointAngleStats = (
     ctx: CanvasRenderingContext2D,
     angles: { joint: string; angle: number }[],
@@ -115,77 +144,104 @@ export const drawJointAngleStats = (
     canvasHeight: number
 ) => {
     // Configuration
-    const boxWidth = 220;
+    const boxWidth = 260; // Wider to accommodate 3 columns (Label, L, R)
     const padding = 15;
     const lineHeight = 24;
-    const headerHeight = 30;
+    const headerHeight = 35;
 
-    // Filter for key joints we want to show
-    const keyJoints = ['Elbow', 'Knee', 'Shoulder'];
-    const displayData: { label: string; left: number | null; right: number | null }[] = keyJoints.map(joint => {
-        const left = angles.find(a => a.joint === `Left ${joint}`)?.angle ?? null;
-        const right = angles.find(a => a.joint === `Right ${joint}`)?.angle ?? null;
-        return { label: joint, left, right };
-    }).filter(d => d.left !== null || d.right !== null);
+    // Define the grid rows we want to show
+    const rows = ['Shoulder', 'Elbow', 'Wrist', 'Hip', 'Knee', 'Ankle'];
 
-    const boxHeight = headerHeight + (displayData.length * lineHeight) + padding;
+    // Prepare data grid
+    const gridData = rows.map(joint => ({
+        label: joint,
+        left: angles.find(a => a.joint === `Left ${joint}`)?.angle ?? null,
+        right: angles.find(a => a.joint === `Right ${joint}`)?.angle ?? null
+    }));
+
+    const contentHeight = (gridData.length * lineHeight) + padding;
+    const boxHeight = headerHeight + contentHeight;
 
     // Position: Top-Right corner with margin
     const margin = 20;
     const x = canvasWidth - boxWidth - margin;
     const y = margin;
 
-    // Draw Box Background (Dark Blue/Slate with opacity)
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'; // Slate-900 with 0.9 opacity
-    ctx.beginPath();
-    ctx.roundRect(x, y, boxWidth, boxHeight, 12); // Rounded corners
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.5)'; // Slate-700 border
+    // 1. Draw Glassmorphism Background
+    ctx.save();
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'; // Slate-900 with opacity
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)'; // Slate-400 border
     ctx.lineWidth = 1;
+
+    // Rounded Rect
+    ctx.beginPath();
+    ctx.roundRect(x, y, boxWidth, boxHeight, 12);
+    ctx.fill();
     ctx.stroke();
 
-    // Draw Header
+    // 2. Draw Header Area
+    ctx.beginPath();
+    ctx.roundRect(x, y, boxWidth, headerHeight, [12, 12, 0, 0]);
+    ctx.fillStyle = 'rgba(30, 41, 59, 0.8)'; // Slightly lighter header
+    ctx.fill();
+
+    // Header Text
     ctx.fillStyle = '#e2e8f0'; // Slate-200
-    ctx.font = 'bold 16px sans-serif';
+    ctx.font = 'bold 15px "Inter", sans-serif'; // Use Inter if available, fallback system
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Analysis Data', x + padding, y + padding + 8);
+    ctx.fillText('Biomechanics Data', x + padding, y + (headerHeight / 2));
 
-    // Draw Icon (Simple line representing chart)
-    ctx.strokeStyle = '#3b82f6'; // Blue-500
-    ctx.lineWidth = 2;
+    // Live Indicator (Green Dot)
     ctx.beginPath();
-    ctx.moveTo(x + padding - 2, y + padding + 8);
-    ctx.lineTo(x + padding - 2 + 5, y + padding + 8 - 5);
-    ctx.lineTo(x + padding - 2 + 10, y + padding + 8 + 2);
-    ctx.lineTo(x + padding - 2 + 15, y + padding + 8 - 8);
-    ctx.stroke();
+    ctx.arc(x + boxWidth - padding - 5, y + (headerHeight / 2), 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#22c55e'; // Green-500
+    ctx.fill();
 
-    // Draw Data Grid
-    let currentY = y + headerHeight + padding;
+    // 3. Draw Column Headers
+    const col1X = x + padding; // Label
+    const col2X = x + boxWidth - 100; // Left
+    const col3X = x + boxWidth - 40; // Right
 
-    ctx.font = '14px monospace'; // Monospace for alignment
+    const startY = y + headerHeight + 15;
 
-    displayData.forEach(item => {
-        // Label (e.g., "Elbow")
-        ctx.fillStyle = '#94a3b8'; // Slate-400
-        ctx.textAlign = 'center';
-        ctx.fillText(item.label, x + (boxWidth / 2), currentY);
+    // Subtle Column Labels (L / R)
+    ctx.font = 'bold 12px monospace';
+    ctx.fillStyle = '#94a3b8'; // Slate-400
+    ctx.textAlign = 'right';
+    ctx.fillText("L(°)", col2X + 10, y + headerHeight - 8); // In header area actually? No, maybe subheader
+    ctx.fillText("R(°)", col3X + 10, y + headerHeight - 8);
+
+    // 4. Draw Rows
+    ctx.font = '14px monospace';
+
+    gridData.forEach((row, i) => {
+        const rowY = startY + (i * lineHeight);
+
+        // Joint Label
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#cbd5e1'; // Slate-300
+        ctx.fillText(row.label, col1X, rowY);
 
         // Left Value
-        if (item.left !== null) {
-            ctx.fillStyle = '#4ade80'; // Green-400
-            ctx.textAlign = 'left';
-            ctx.fillText(`L: ${item.left}°`, x + padding, currentY);
+        ctx.textAlign = 'right';
+        if (row.left !== null) {
+            ctx.fillStyle = '#38bdf8'; // Sky-400 for Left
+            ctx.fillText(row.left.toString(), col2X + 10, rowY);
+        } else {
+            ctx.fillStyle = '#475569'; // Slate-600 dimmed
+            ctx.fillText("--", col2X + 10, rowY);
         }
 
         // Right Value
-        if (item.right !== null) {
-            ctx.fillStyle = '#4ade80'; // Green-400
-            ctx.textAlign = 'right';
-            ctx.fillText(`R: ${item.right}°`, x + boxWidth - padding, currentY);
+        if (row.right !== null) {
+            ctx.fillStyle = '#f472b6'; // Pink-400 for Right
+            ctx.fillText(row.right.toString(), col3X + 10, rowY);
+        } else {
+            ctx.fillStyle = '#475569'; // Slate-600 dimmed
+            ctx.fillText("--", col3X + 10, rowY);
         }
-
-        currentY += lineHeight;
     });
+
+    ctx.restore();
 };
