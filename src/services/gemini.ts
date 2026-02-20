@@ -34,9 +34,9 @@ const responseSchema: Schema = {
           items: {
             type: Type.OBJECT,
             properties: {
-              jointName: { type: Type.STRING },
-              measuredAngle: { type: Type.NUMBER, description: "Estimated angle in degrees." },
-              idealAngleRange: { type: Type.STRING, description: "Ideal range e.g. '90-100'" },
+              jointName: { type: Type.STRING, description: "Joint name e.g. 'Shoulder (Left)', 'Knee (Right)'. Must use this exact format." },
+              measuredAngle: { type: Type.NUMBER, description: "Use the exact angle value from the BIOMECHANICS TELEMETRY if available. Otherwise estimate visually." },
+              idealAngleRange: { type: Type.STRING, description: "Ideal range e.g. '170-180'" },
               status: { type: Type.STRING, enum: ["Good", "Needs Improvement", "Critical"] }
             }
           }
@@ -85,7 +85,7 @@ Provide objective, scientific analysis of human movement based on biomechanical 
 **OUTPUT FORMAT:**
 You must return a JSON object matching the provided schema.
 - **steps**: Break the movement down into 3-5 logical phases
-- **jointAngles**: Estimate key angles (Include Wrists/Ankles if relevant to the movement)
+- **jointAngles**: You MUST include ALL 12 joints in this order: Shoulder (Left), Shoulder (Right), Elbow (Left), Elbow (Right), Wrist (Left), Wrist (Right), Hip (Left), Hip (Right), Knee (Left), Knee (Right), Ankle (Left), Ankle (Right). For each joint, use the exact measured angle from the telemetry data (prefixed L= or R=). Do NOT omit any joint even if not clearly visible.
 - **safetyRating**: Be strict on potentially injurious form (1=dangerous, 10=safe)
 - **observations**: Note what you see objectively, referencing specific frames
 - **corrections**: Provide specific biomechanical improvements

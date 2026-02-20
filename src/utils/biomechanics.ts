@@ -45,67 +45,68 @@ export const analyzeSymmetry = (landmarks: Landmark[]) => {
 
 // 3. Calculate All Major Joint Angles
 export const calculateAllJointAngles = (landmarks: Landmark[]): { joint: string; angle: number }[] => {
-    // Check visibility threshold first
-    // we use a relaxed 0.25 (vs 0.5) to allow side-view "best guesses" to be visible
-    const isVisible = (l: Landmark) => l && l.visibility !== undefined && l.visibility > 0.25;
+    // We calculate angles for all joints MediaPipe has detected, regardless of visibility.
+    // The skeleton is already drawn without visibility gates, so the HUD should match.
+    // We only check that the landmark index exists (not undefined).
+    const exists = (l: Landmark) => l !== undefined && l !== null;
 
     const angles: { joint: string; angle: number }[] = [];
 
     // --- UPPER BODY ---
 
     // Left Shoulder (Hip -> Shoulder -> Elbow)
-    if (isVisible(landmarks[23]) && isVisible(landmarks[11]) && isVisible(landmarks[13])) {
+    if (exists(landmarks[23]) && exists(landmarks[11]) && exists(landmarks[13])) {
         angles.push({ joint: 'Left Shoulder', angle: Math.round(calculateAngle(landmarks[23], landmarks[11], landmarks[13])) });
     }
     // Right Shoulder (Hip -> Shoulder -> Elbow)
-    if (isVisible(landmarks[24]) && isVisible(landmarks[12]) && isVisible(landmarks[14])) {
+    if (exists(landmarks[24]) && exists(landmarks[12]) && exists(landmarks[14])) {
         angles.push({ joint: 'Right Shoulder', angle: Math.round(calculateAngle(landmarks[24], landmarks[12], landmarks[14])) });
     }
 
     // Left Elbow (Shoulder -> Elbow -> Wrist)
-    if (isVisible(landmarks[11]) && isVisible(landmarks[13]) && isVisible(landmarks[15])) {
+    if (exists(landmarks[11]) && exists(landmarks[13]) && exists(landmarks[15])) {
         angles.push({ joint: 'Left Elbow', angle: Math.round(calculateAngle(landmarks[11], landmarks[13], landmarks[15])) });
     }
     // Right Elbow (Shoulder -> Elbow -> Wrist)
-    if (isVisible(landmarks[12]) && isVisible(landmarks[14]) && isVisible(landmarks[16])) {
+    if (exists(landmarks[12]) && exists(landmarks[14]) && exists(landmarks[16])) {
         angles.push({ joint: 'Right Elbow', angle: Math.round(calculateAngle(landmarks[12], landmarks[14], landmarks[16])) });
     }
 
-    // Left Wrist (Elbow -> Wrist -> Index) - Approx for wrist flexion/extension alignment
-    if (isVisible(landmarks[13]) && isVisible(landmarks[15]) && isVisible(landmarks[19])) {
+    // Left Wrist (Elbow -> Wrist -> Index)
+    if (exists(landmarks[13]) && exists(landmarks[15]) && exists(landmarks[19])) {
         angles.push({ joint: 'Left Wrist', angle: Math.round(calculateAngle(landmarks[13], landmarks[15], landmarks[19])) });
     }
     // Right Wrist (Elbow -> Wrist -> Index)
-    if (isVisible(landmarks[14]) && isVisible(landmarks[16]) && isVisible(landmarks[20])) {
+    if (exists(landmarks[14]) && exists(landmarks[16]) && exists(landmarks[20])) {
         angles.push({ joint: 'Right Wrist', angle: Math.round(calculateAngle(landmarks[14], landmarks[16], landmarks[20])) });
     }
 
     // --- LOWER BODY ---
 
     // Left Hip (Shoulder -> Hip -> Knee)
-    if (isVisible(landmarks[11]) && isVisible(landmarks[23]) && isVisible(landmarks[25])) {
+    if (exists(landmarks[11]) && exists(landmarks[23]) && exists(landmarks[25])) {
         angles.push({ joint: 'Left Hip', angle: Math.round(calculateAngle(landmarks[11], landmarks[23], landmarks[25])) });
     }
     // Right Hip (Shoulder -> Hip -> Knee)
-    if (isVisible(landmarks[12]) && isVisible(landmarks[24]) && isVisible(landmarks[26])) {
+    if (exists(landmarks[12]) && exists(landmarks[24]) && exists(landmarks[26])) {
         angles.push({ joint: 'Right Hip', angle: Math.round(calculateAngle(landmarks[12], landmarks[24], landmarks[26])) });
     }
 
     // Left Knee (Hip -> Knee -> Ankle)
-    if (isVisible(landmarks[23]) && isVisible(landmarks[25]) && isVisible(landmarks[27])) {
+    if (exists(landmarks[23]) && exists(landmarks[25]) && exists(landmarks[27])) {
         angles.push({ joint: 'Left Knee', angle: Math.round(calculateAngle(landmarks[23], landmarks[25], landmarks[27])) });
     }
     // Right Knee (Hip -> Knee -> Ankle)
-    if (isVisible(landmarks[24]) && isVisible(landmarks[26]) && isVisible(landmarks[28])) {
+    if (exists(landmarks[24]) && exists(landmarks[26]) && exists(landmarks[28])) {
         angles.push({ joint: 'Right Knee', angle: Math.round(calculateAngle(landmarks[24], landmarks[26], landmarks[28])) });
     }
 
-    // Left Ankle (Knee -> Ankle -> Foot Index) - Approx for dorsiflexion
-    if (isVisible(landmarks[25]) && isVisible(landmarks[27]) && isVisible(landmarks[31])) {
+    // Left Ankle (Knee -> Ankle -> Foot Index)
+    if (exists(landmarks[25]) && exists(landmarks[27]) && exists(landmarks[31])) {
         angles.push({ joint: 'Left Ankle', angle: Math.round(calculateAngle(landmarks[25], landmarks[27], landmarks[31])) });
     }
     // Right Ankle (Knee -> Ankle -> Foot Index)
-    if (isVisible(landmarks[26]) && isVisible(landmarks[28]) && isVisible(landmarks[32])) {
+    if (exists(landmarks[26]) && exists(landmarks[28]) && exists(landmarks[32])) {
         angles.push({ joint: 'Right Ankle', angle: Math.round(calculateAngle(landmarks[26], landmarks[28], landmarks[32])) });
     }
 
