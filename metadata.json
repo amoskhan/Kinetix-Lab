@@ -1,8 +1,0 @@
-{
-  "name": "BioMechanic AI",
-  "description": "A Kinovea-inspired video analysis tool that uses AI to recognize movements, calculate joint angles, and provide biomechanical feedback acting as a virtual PE teacher.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone"
-  ]
-}

@@ -29,8 +29,24 @@ export interface BiomechanicalFeedback {
   observations: string[];
   corrections: string[];
   safetyRating: number; // 1-10
+  frames?: { label: string; images: string[] }[];
 }
 
 export interface AnalysisResponse {
   feedback: BiomechanicalFeedback;
 }
+
+export interface AnalysisRecord {
+  id?: string;
+  created_at?: string;
+  movement_name: string;
+  confidence: number;
+  analysis_data: AnalysisResponse; // Use strict type 
+  video_url?: string;
+}
+
+export interface HistoryItem extends AnalysisRecord {
+  thumbnail?: string;
+}
+
+export type ViewMode = 'setup' | 'single' | 'dual';

@@ -180,13 +180,16 @@ async function callGeminiApi(
 export const analyzeMovement = async (
   base64Image: string,
   poseData?: PoseData,
-  userDeclaredSkill?: string
+  userDeclaredSkill?: string,
+  telemetry: string = ""
 ): Promise<AnalysisResponse> => {
 
   try {
     // Enhance prompt with Pose Data if available
-    let poseContext = "";
-    if (poseData) {
+    let poseContext = telemetry ? `\n\n**LIVE BIOMECHANICS TELEMETRY (MEDIA-PIPE):**\n${telemetry}\n(Use this exact data for your math.)` : "";
+
+    if (!telemetry && poseData) {
+      // Fallback to legacy pose context if new telemetry isn't passed (shouldn't happen with new VideoPlayer)
       const landmarks = poseData.landmarks;
       const analysis = poseDetectionService.analyzePoseGeometry(poseData);
 
@@ -269,10 +272,11 @@ export const analyzeMultiFrameMovement = async (
     const promptText = `
     **MULTI-FRAME MOVEMENT ANALYSIS**
     
-    You are analyzing ${input.frames.length} frames showing a movement sequence:
-    - Frame 1 (t=${input.timestamps[0].toFixed(2)}s): BEFORE position
-    - Frame 2 (t=${input.timestamps[1].toFixed(2)}s): KEY FRAME (center)
-    - Frame 3 (t=${input.timestamps[2].toFixed(2)}s): AFTER position
+    You are analyzing ${input.frames.length} frames showing a movement sequence.
+    These frames correspond to the "Visual Evidence" provided to the user.
+    - Frame 1: Start of sequence
+    - Frame ${Math.ceil(input.frames.length / 2)}: Middle/Key Moment
+    - Frame ${input.frames.length}: End of sequence
     
     ${poseContext}
     
@@ -280,11 +284,11 @@ export const analyzeMultiFrameMovement = async (
     ${input.userDeclaredSkill
         ? `1. The user has declared this movement as "${input.userDeclaredSkill}". Analyze it as this movement type and verify correctness.
     2. If the visual evidence contradicts the declared movement, note this in your analysis but still provide feedback for the declared movement.`
-        : `1. First, identify the movement type by observing the progression across all 3 frames.`}
+        : `1. First, identify the movement type by observing the progression across all frames.`}
     2. Use the temporal context to understand the movement phase (preparation, execution, follow-through)
-    3. Focus your detailed analysis on Frame 2 (the key frame)
-    4. Reference Frames 1 and 3 to validate movement direction and technique
-    5. Use the measured joint angles provided above for precise biomechanical assessment
+    3. **CITATION REQUIRED:** When describing errors or observations, you MUST reference the specific frame number where this is visible (e.g., "In Frame 1, knees align...", "In Frame 3, back rounds...").
+    4. Focus your detailed analysis on the Key Moment (Frame ${Math.ceil(input.frames.length / 2)}) but validatetracking across all frames.
+    5. Use the measured joint angles provided above for precise biomechanical assessment.
     
     Provide a comprehensive biomechanical analysis in JSON format.
     `;
@@ -315,3 +319,104 @@ export const analyzeMultiFrameMovement = async (
 
 // Deprecated alias for backward compatibility
 export const analyzeFrame = analyzeMovement;
+
+export interface MultiViewAnalysisInput {
+  views: {
+    label: string; // e.g. "Front View", "Side View"
+    frames: string[]; // Sequence of base64 frames
+    telemetry?: string;
+    poseData?: PoseData;
+  }[];
+  userDeclaredSkill?: string;
+}
+
+export const analyzeMultiViewMovement = async (
+  input: MultiViewAnalysisInput
+): Promise<AnalysisResponse> => {
+  try {
+    // Build context from all views
+    let combinedContext = "";
+
+    input.views.forEach((view, index) => {
+      combinedContext += `\n\n--- VIEW ${index + 1}: ${view.label.toUpperCase()} ---\n`;
+      combinedContext += `Contains ${view.frames.length} frames covering the movement sequence.\n`;
+
+      if (view.telemetry) {
+        combinedContext += `**LIVE TELEMETRY (Center Frame):**\n${view.telemetry}\n`;
+      } else if (view.poseData) {
+        // Fallback if raw pose provided
+        const analysis = poseDetectionService.analyzePoseGeometry(view.poseData);
+        combinedContext += `**CALCULATED ANGLES (Center Frame):**\n${analysis.keyAngles.map(a => `- ${a.joint}: ${a.angle}°`).join('\n')}\n`;
+        combinedContext += `**POSE SUMMARY:**\n${analysis.poseSummary}\n`;
+      }
+    });
+
+    // Calculate index mapping for the prompt
+    let currentIndex = 1;
+    const mappingTable = input.views.map((v, i) => {
+      const start = currentIndex;
+      const end = currentIndex + v.frames.length - 1;
+      currentIndex += v.frames.length;
+      return `   - Global Images ${start}-${end} correspond to **${v.label} Frames 1-${v.frames.length}**`;
+    }).join('\n');
+
+    const promptText = `
+    **MULTI-ANGLE TEMPORAL BIOMECHANICS ANALYSIS**
+    
+    You are analyzing a **SEQUENCE** of a movement captured from ${input.views.length} different camera angles simultaneously.
+    These frames are displayed to the user in the "Visual Evidence" section.
+    
+    **INPUT STRUCTURE:**
+    - Total Images: ${input.views.reduce((acc, v) => acc + v.frames.length, 0)}
+    - Order: The images are provided in blocks by View, then sequentially by Time.
+    
+    **INDEX MAPPING (CRITICAL - DO NOT IGNORE):**
+    ${mappingTable}
+    
+    **CRITICAL INSTRUCTIONS:**
+    1. **CITATION REQUIRED:** You MUST cite specific evidence for **EVERY** observation, correction, or technique point you make.
+       - **Format:** "**(View Label, Frame X)**" -> e.g., "(Front View, Frame 2)", "(Side View, Frame 4)"
+       - **Translation Rule:** You receive images as a flat list (1 to N). You MUST translate the Global Image Index to the Local View Frame using the table above.
+         - *Example:* If Side View starts at Image 11, then Image 15 is "Side View, Frame 5".
+         - NEVER cite "Frame 15" if the view only has 10 frames.
+       - "Frame 1" is always the start of that view's sequence.
+
+    2. **Synthesize Views:** 
+       - Use "Front View" for symmetry (knees caving, shifts).
+       - Use "Side View" for spinal alignment, depth, and forward lean.
+       - If views contradict, prioritize the one showing the error (e.g., "Side View reveals rounding not seen in Front").
+
+    3. **Phase Identification:** Identify the phase (Setup, Descent, Apex, Ascent) based on the temporal sequence.
+
+    ${input.userDeclaredSkill ? `**USER DECLARED MOVEMENT:** "${input.userDeclaredSkill}"` : ""}
+    
+    Provide a unified biomechanical analysis in JSON format.
+    `;
+
+    // Prepare parts - Flatten all frames from all views
+    const allImageParts: any[] = [];
+
+    input.views.forEach(view => {
+      view.frames.forEach(base64 => {
+        const cleanBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
+        allImageParts.push({
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: cleanBase64
+          }
+        });
+      });
+    });
+
+    const parts = [
+      ...allImageParts,
+      { text: promptText }
+    ];
+
+    return await callGeminiApi(parts, SYSTEM_INSTRUCTION, responseSchema, 4096); // Increased token limit for complex analysis
+
+  } catch (error) {
+    console.error("Gemini Multi-View Analysis Error:", error);
+    throw error;
+  }
+};

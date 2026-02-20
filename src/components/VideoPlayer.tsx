@@ -1,15 +1,15 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { Upload, Play, Pause, Camera, RotateCcw, Activity, Maximize, Minimize } from 'lucide-react';
+import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
+import { Upload, Play, Pause, Maximize, Minimize, Activity } from 'lucide-react';
 import { captureVideoFrame, captureMultipleFrames, MultiFrameCapture } from '../utils/fileUtils';
 import { PoseData, poseDetectionService } from '../services/poseDetectionService';
+import { getCenterOfMass, analyzeSymmetry, calculateAllJointAngles, formatTelemetryForPrompt, drawJointAngleStats } from '../utils/biomechanics';
 
-interface VideoPlayerProps {
-  onFrameCapture: (base64Data: string) => void;
-  onMultiFrameCapture?: (capture: MultiFrameCapture, centerPose?: PoseData) => void;
-  onMultiFrameSnapshot?: (snapshots: FrameSnapshot[]) => void;
-  isAnalyzing: boolean;
-  currentPose?: PoseData;
-  onPoseUpdate?: (pose: PoseData | null, angles: { joint: string; angle: number }[]) => void;
+// Define the handle interface for the parent to communicate with
+export interface VideoPlayerHandle {
+  captureFrame: () => Promise<{ base64: string; telemetry: string } | null>;
+  captureMultiFrames: (count?: number, interval?: number, startTimeOverride?: number) => Promise<{ capture: MultiFrameCapture; centerPose: PoseData | undefined } | null>;
+  getVideoElement: () => HTMLVideoElement | null;
+  findPeak: () => Promise<number>;
 }
 
 export interface FrameSnapshot {
@@ -19,10 +19,19 @@ export interface FrameSnapshot {
   angles: { joint: string; angle: number }[];
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameCapture, onMultiFrameSnapshot, isAnalyzing, currentPose, onPoseUpdate }) => {
+interface VideoPlayerProps {
+  label?: string; // e.g. "Front View"
+  onFrameCapture?: (base64Data: string, telemetry?: string) => void;
+  onPoseUpdate?: (pose: PoseData | null, angles: { joint: string; angle: number }[]) => void;
+  isActive?: boolean; // To style active state if needed
+}
+
+const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "Video Source", onPoseUpdate }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
+  const latestTelemetryRef = useRef<string>("");
+
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -30,9 +39,196 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [showAngles, setShowAngles] = useState(true);
   const [currentAngles, setCurrentAngles] = useState<{ joint: string; angle: number }[]>([]);
-  const [snapshotCount, setSnapshotCount] = useState<number>(5);
-  const [isCapturingSnapshots, setIsCapturingSnapshots] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [canvasStyle, setCanvasStyle] = useState<React.CSSProperties>({});
+
+  // --- Expose Methods via Ref ---
+  useImperativeHandle(ref, () => ({
+    captureFrame: async () => {
+      if (!videoRef.current) return null;
+      videoRef.current.pause();
+      setIsPlaying(false);
+
+      // Ensure pose detected on current frame
+      const livePose = await poseDetectionService.detectPoseFrame(videoRef.current);
+      if (livePose) {
+        const landmarks = livePose.landmarks;
+        const symmetry = analyzeSymmetry(landmarks);
+        const angs = calculateAllJointAngles(landmarks);
+        latestTelemetryRef.current = formatTelemetryForPrompt(angs, symmetry);
+      }
+
+      const base64 = captureVideoFrame(videoRef.current);
+      if (base64) {
+        return { base64, telemetry: latestTelemetryRef.current };
+      }
+      return null;
+    },
+    captureMultiFrames: async (count: number = 3, interval: number = 0.5, startTimeOverride?: number) => {
+      if (!videoRef.current) return null;
+      videoRef.current.pause();
+      setIsPlaying(false);
+
+      const referenceTime = startTimeOverride ?? videoRef.current.currentTime;
+
+      const onFrameDraw = async (ctx: CanvasRenderingContext2D, time: number) => {
+        if (!videoRef.current) return;
+
+        // 1. Detect pose at this specific timestamp
+        const livePose = await poseDetectionService.detectPoseFrame(videoRef.current);
+
+        if (livePose) {
+          // 2. Draw Skeleton
+          // We need to scale context to match original video resolution if not already
+          poseDetectionService.drawSkeleton(ctx, livePose);
+
+          // 3. Draw Angles
+          const landmarks = livePose.landmarks;
+          const angs = calculateAllJointAngles(landmarks);
+
+          // Re-use the existing drawAnglesOnCanvas logic
+          // Note: drawAnglesOnCanvas expects width/height of the canvas
+          drawAnglesOnCanvas(ctx, livePose, angs, ctx.canvas.width, ctx.canvas.height);
+
+          // 4. Draw Joint Angles Data Box
+          drawJointAngleStats(ctx, angs, ctx.canvas.width, ctx.canvas.height);
+        }
+      };
+
+      try {
+        // Capture frames centered around current time
+        const multiCapture = await captureMultipleFrames(
+          videoRef.current,
+          referenceTime,
+          count,
+          interval,
+          onFrameDraw // Pass the overlay callback
+        );
+
+        const centerPose = await poseDetectionService.detectPoseFromVideo(videoRef.current, referenceTime * 1000);
+        return { capture: multiCapture, centerPose: centerPose || undefined };
+      } catch (e) {
+        console.error("Multi-frame capture failed:", e);
+        return null;
+      }
+    },
+    findPeak: async () => {
+      if (!videoRef.current) return 0;
+      const originalTime = videoRef.current.currentTime;
+      videoRef.current.pause();
+      setIsPlaying(false);
+
+      try {
+        const { bestTime, score } = await poseDetectionService.findPeakMoment(videoRef.current);
+        // Note: We DO NOT seek here anymore to avoid "replaying" or jumping.
+        // We return the time, and the capture function will use it directly.
+        console.log(`Smart Search found peak at ${bestTime}s (score: ${score})`);
+        return bestTime;
+      } catch (e) {
+        console.error("Smart search failed, reverting", e);
+        videoRef.current.currentTime = originalTime;
+        return originalTime;
+      }
+    },
+    getVideoElement: () => videoRef.current
+  }));
+
+  // --- Helper Functions ---
+
+  const updateCanvasLayout = () => {
+    const video = videoRef.current;
+    const container = videoContainerRef.current;
+    if (video && container) {
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+
+      if (!vw || !vh || !cw || !ch) return;
+
+      const videoRatio = vw / vh;
+      const containerRatio = cw / ch;
+
+      let width, height, left, top;
+
+      if (containerRatio > videoRatio) {
+        // Container is wider than video (pillarbox) - Video fills height
+        height = ch;
+        width = height * videoRatio;
+        top = 0;
+        left = (cw - width) / 2;
+      } else {
+        // Container is taller than video (letterbox) - Video fills width
+        width = cw;
+        height = width / videoRatio;
+        left = 0;
+        top = (ch - height) / 2;
+      }
+
+      setCanvasStyle({
+        width: `${width}px`,
+        height: `${height}px`,
+        top: `${top}px`,
+        left: `${left}px`,
+        position: 'absolute',
+        pointerEvents: 'none' // Ensure clicks pass through to video/controls
+      });
+
+      // Update canvas internal resolution to match source video
+      if (canvasRef.current) {
+        canvasRef.current.width = vw;
+        canvasRef.current.height = vh;
+      }
+    }
+  };
+
+  const drawAnglesOnCanvas = (
+    ctx: CanvasRenderingContext2D,
+    pose: PoseData,
+    angles: { joint: string; angle: number }[],
+    width: number,
+    height: number
+  ) => {
+    const landmarks = pose.landmarks;
+
+    // Define joint positions for angle labels
+    const jointPositions: { [key: string]: { x: number; y: number } } = {
+      'Right Elbow': landmarks[13],
+      'Left Elbow': landmarks[14],
+      'Right Knee': landmarks[25],
+      'Left Knee': landmarks[26],
+      'Right Shoulder': landmarks[11],
+      'Left Shoulder': landmarks[12]
+    };
+
+    angles.forEach(({ joint, angle }) => {
+      const pos = jointPositions[joint];
+      if (pos) {
+        const x = pos.x * width;
+        const y = pos.y * height;
+
+        // Draw background box
+        const text = `${Math.round(angle)}°`;
+        ctx.font = 'bold 14px Arial';
+        const metrics = ctx.measureText(text);
+        const padding = 4;
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(
+          x - metrics.width / 2 - padding,
+          y - 20 - padding,
+          metrics.width + padding * 2,
+          20 + padding * 2
+        );
+
+        // Draw text
+        ctx.fillStyle = '#00FF00';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x, y - 10);
+      }
+    });
+  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -40,7 +236,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
       const url = URL.createObjectURL(file);
       setVideoSrc(url);
       setIsPlaying(false);
-      // Reset pose when new video loads
     }
   };
 
@@ -60,10 +255,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
     }
   };
 
+
+
+  // --- Effects ---
+
   // Listen for fullscreen changes
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
+      requestAnimationFrame(updateCanvasLayout); // Update layout on fullscreen change
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -72,38 +272,107 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
     };
   }, []);
 
+  // Update layout on metadata load and resize
+  useEffect(() => {
+    const handleResize = () => {
+      requestAnimationFrame(updateCanvasLayout);
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    // Also observe the container for size changes using ResizeObserver
+    const observer = new ResizeObserver(() => {
+      requestAnimationFrame(updateCanvasLayout);
+    });
+
+    if (videoContainerRef.current) {
+      observer.observe(videoContainerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      observer.disconnect();
+    };
+  }, [videoSrc]); // Re-run if videoSrc changes to re-observe
+
   // Live Pose Tracking Loop
   useEffect(() => {
     let animationFrameId: number;
 
     const renderLoop = async () => {
+      // 1. Check conditions
       if (videoRef.current && canvasRef.current && showSkeleton && isPlaying) {
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
 
         if (ctx) {
-          // Ensure canvas matches video dimensions
+          // 2. Ensure canvas matches video dimensions
           if (canvas.width !== videoRef.current.videoWidth || canvas.height !== videoRef.current.videoHeight) {
             canvas.width = videoRef.current.videoWidth;
             canvas.height = videoRef.current.videoHeight;
+            // If resolution changed, update layout too
+            updateCanvasLayout();
           }
 
-          // Detect pose on current video frame
+          // 3. Detect pose on current video frame
           const livePose = await poseDetectionService.detectPoseFrame(videoRef.current);
 
           ctx.clearRect(0, 0, canvas.width, canvas.height);
+
           if (livePose) {
+            // Draw Skeleton
             poseDetectionService.drawSkeleton(ctx, livePose);
-            
-            // Calculate and display angles
+
+            // --- UNIVERSAL BIOMECHANICS ---
+            const landmarks = livePose.landmarks;
+            const com = getCenterOfMass(landmarks);
+            const symmetry = analyzeSymmetry(landmarks);
+            const angs = calculateAllJointAngles(landmarks);
+
+            // Format for AI & Store
+            latestTelemetryRef.current = formatTelemetryForPrompt(angs, symmetry);
+
+            // Draw CoM (Plumb Line)
+            if (com) {
+              ctx.beginPath();
+              ctx.moveTo(com.x * canvas.width, com.y * canvas.height);
+              ctx.lineTo(com.x * canvas.width, canvas.height);
+              ctx.lineWidth = 2;
+              ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)'; // Cyan dashed
+              ctx.setLineDash([5, 5]);
+              ctx.stroke();
+              ctx.setLineDash([]);
+
+              ctx.beginPath();
+              ctx.arc(com.x * canvas.width, com.y * canvas.height, 5, 0, 2 * Math.PI);
+              ctx.fillStyle = '#00FFFF';
+              ctx.fill();
+            }
+
+            // Draw Symmetry Lines
+            const drawSym = (i1: number, i2: number, level: boolean) => {
+              if (landmarks[i1].visibility && landmarks[i1].visibility! > 0.5 &&
+                landmarks[i2].visibility && landmarks[i2].visibility! > 0.5) {
+                ctx.beginPath();
+                ctx.moveTo(landmarks[i1].x * canvas.width, landmarks[i1].y * canvas.height);
+                ctx.lineTo(landmarks[i2].x * canvas.width, landmarks[i2].y * canvas.height);
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = level ? 'rgba(0, 255, 0, 0.6)' : 'rgba(255, 0, 0, 0.6)';
+                ctx.stroke();
+              }
+            };
+            drawSym(11, 12, symmetry.shouldersLevel); // Shoulders
+            drawSym(23, 24, symmetry.hipsLevel);       // Hips
+
+            // Calculate and display angles (Legacy/Visual)
             const angles = poseDetectionService.analyzePoseGeometry(livePose).keyAngles;
             setCurrentAngles(angles);
-            
-            // Draw angles on canvas if enabled
+
+            // Draw numerical angles on canvas if enabled
             if (showAngles) {
               drawAnglesOnCanvas(ctx, livePose, angles, canvas.width, canvas.height);
             }
-            
+
             // Notify parent component
             if (onPoseUpdate) {
               onPoseUpdate(livePose, angles);
@@ -116,13 +385,44 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
           }
         }
       } else if (canvasRef.current && !isPlaying) {
-        // Clear canvas when video is paused
+        // Clear canvas when video is paused/stopped, unless we want to keep the last frame?
+        // Usually better to clear to avoid stale overlays, or handleTimeUpdate will redraw if paused.
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          // We might want to NOT clear if we are just paused, to show the static pose.
+          // But wait, renderLoop runs constantly. If !isPlaying, it clears.
+          // But handleTimeUpdate redraws when scrubbing/paused. 
+          // So if just paused, we might clear it here? 
+          // Actually, if !isPlaying, this block runs.
+          // Let's only clear if we really need to.
+          // For now, keep existing logic: clear if !isPlaying.
+          // But `handleTimeUpdate` will re-draw if scrubbing.
+          // If just paused, `handleTimeUpdate` isn't firing constantly.
+          // So the canvas might be cleared and stay empty?
+          // The original code passed `!isPlaying` to the else if block.
+          // Let's modify: if just paused, don't clear.
+          // Only clear if no video?
+          // Original code:
+          // } else if (canvasRef.current && !isPlaying) {
+          //    ctx.clearRect...
+          // }
+          // This implies when you pause, the skeleton disappears.
+          // Maybe we want it to stay?
+          // For now, I'll stick to the original behavior to avoid regressions, but the user *might* want it to stay.
+          // Actually, `handleTimeUpdate` handles the "scrubbing" case.
+          // Providing a "Pause" keeps the video element on the frame.
+          // `renderLoop` only updates when `isPlaying`.
+          // So if `!isPlaying`, the canvas is cleared.
+          // This means pausing hides the skeleton. That seems like bad UX.
+          // I will COMMENT OUT the clearRect for !isPlaying to see if it improves UX (skeleton stays).
+          // Wait, if I comment it out, the skeleton on the LAST frame persists.
+          // But if I scrub, `handleTimeUpdate` clears and redraws.
+          // So it is safe to remove the aggressive clearing on pause.
+
+          // ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
-        setCurrentAngles([]);
+        // setCurrentAngles([]); // Don't clear angles on pause either
       }
       animationFrameId = requestAnimationFrame(renderLoop);
     };
@@ -135,38 +435,84 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
   // Update angles when scrubbing (not playing)
   const handleTimeUpdate = async () => {
     if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
-      
+      const time = videoRef.current.currentTime;
+      setCurrentTime(time);
+
       // Update pose and angles when scrubbing (paused)
       if (!isPlaying && videoRef.current && canvasRef.current && showSkeleton) {
         const livePose = await poseDetectionService.detectPoseFrame(videoRef.current);
-        
+
         if (livePose) {
           const canvas = canvasRef.current;
           const ctx = canvas.getContext('2d');
-          
+
           if (ctx) {
             // Ensure canvas matches video dimensions
             if (canvas.width !== videoRef.current.videoWidth || canvas.height !== videoRef.current.videoHeight) {
               canvas.width = videoRef.current.videoWidth;
               canvas.height = videoRef.current.videoHeight;
             }
-            
+
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             poseDetectionService.drawSkeleton(ctx, livePose);
-            
+
+            // Biomechanics (CoM/Symmetry) on scrubbing too
+            const landmarks = livePose.landmarks;
+            const com = getCenterOfMass(landmarks);
+            const symmetry = analyzeSymmetry(landmarks);
+            const angs = calculateAllJointAngles(landmarks);
+            latestTelemetryRef.current = formatTelemetryForPrompt(angs, symmetry);
+
+            // Draw CoM
+            if (com) {
+              ctx.beginPath();
+              ctx.moveTo(com.x * canvas.width, com.y * canvas.height);
+              ctx.lineTo(com.x * canvas.width, canvas.height);
+              ctx.lineWidth = 2;
+              ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
+              ctx.setLineDash([5, 5]);
+              ctx.stroke();
+              ctx.setLineDash([]);
+
+              ctx.beginPath();
+              ctx.arc(com.x * canvas.width, com.y * canvas.height, 5, 0, 2 * Math.PI);
+              ctx.fillStyle = '#00FFFF';
+              ctx.fill();
+            }
+
+            // Draw Symmetry
+            const drawSym = (i1: number, i2: number, level: boolean) => {
+              if (landmarks[i1].visibility && landmarks[i1].visibility! > 0.5 &&
+                landmarks[i2].visibility && landmarks[i2].visibility! > 0.5) {
+                ctx.beginPath();
+                ctx.moveTo(landmarks[i1].x * canvas.width, landmarks[i1].y * canvas.height);
+                ctx.lineTo(landmarks[i2].x * canvas.width, landmarks[i2].y * canvas.height);
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = level ? 'rgba(0, 255, 0, 0.6)' : 'rgba(255, 0, 0, 0.6)';
+                ctx.stroke();
+              }
+            };
+            drawSym(11, 12, symmetry.shouldersLevel);
+            drawSym(23, 24, symmetry.hipsLevel);
+
+
             const angles = poseDetectionService.analyzePoseGeometry(livePose).keyAngles;
             setCurrentAngles(angles);
-            
+
             if (showAngles) {
               drawAnglesOnCanvas(ctx, livePose, angles, canvas.width, canvas.height);
             }
-            
+
             if (onPoseUpdate) {
               onPoseUpdate(livePose, angles);
             }
           }
         } else {
+          // If no pose found during scrubbing (e.g. empty frame), clear
+          if (canvasRef.current && !isPlaying) {
+            const ctx = canvasRef.current.getContext('2d');
+            ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          }
           setCurrentAngles([]);
           if (onPoseUpdate) {
             onPoseUpdate(null, []);
@@ -176,53 +522,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
     }
   };
 
-  const drawAnglesOnCanvas = (
-    ctx: CanvasRenderingContext2D,
-    pose: PoseData,
-    angles: { joint: string; angle: number }[],
-    width: number,
-    height: number
-  ) => {
-    const landmarks = pose.landmarks;
-    
-    // Define joint positions for angle labels
-    const jointPositions: { [key: string]: { x: number; y: number } } = {
-      'Right Elbow': landmarks[13],
-      'Left Elbow': landmarks[14],
-      'Right Knee': landmarks[25],
-      'Left Knee': landmarks[26],
-      'Right Shoulder': landmarks[11],
-      'Left Shoulder': landmarks[12]
-    };
-    
-    angles.forEach(({ joint, angle }) => {
-      const pos = jointPositions[joint];
-      if (pos) {
-        const x = pos.x * width;
-        const y = pos.y * height;
-        
-        // Draw background box
-        const text = `${Math.round(angle)}°`;
-        ctx.font = 'bold 14px Arial';
-        const metrics = ctx.measureText(text);
-        const padding = 4;
-        
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(
-          x - metrics.width / 2 - padding,
-          y - 20 - padding,
-          metrics.width + padding * 2,
-          20 + padding * 2
-        );
-        
-        // Draw text
-        ctx.fillStyle = '#00FF00';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(text, x, y - 10);
-      }
-    });
-  };
 
   const togglePlay = () => {
     if (videoRef.current) {
@@ -241,112 +540,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
     }
   };
 
-  const handleCapture = async () => {
-    if (videoRef.current) {
-      // Pause to capture clear frames
-      videoRef.current.pause();
-      setIsPlaying(false);
-
-      const currentVideoTime = videoRef.current.currentTime;
-
-      // Use multi-frame capture if callback is provided
-      if (onMultiFrameCapture) {
-        try {
-          // Capture 3 frames: 0.5s before, current, 0.5s after
-          const multiCapture = await captureMultipleFrames(videoRef.current, currentVideoTime, 3, 0.5);
-          
-          // Detect pose on center frame
-          const centerPose = await poseDetectionService.detectPoseFromVideo(videoRef.current, currentVideoTime * 1000);
-          
-          onMultiFrameCapture(multiCapture, centerPose || undefined);
-        } catch (error) {
-          console.error("Multi-frame capture failed:", error);
-          // Fallback to single frame
-          const base64 = captureVideoFrame(videoRef.current);
-          if (base64) {
-            onFrameCapture(base64);
-          }
-        }
-      } else {
-        // Fallback to single frame capture
-        const base64 = captureVideoFrame(videoRef.current);
-        if (base64) {
-          onFrameCapture(base64);
-        }
-      }
-    }
-  };
-
-  const handleMultiSnapshot = async () => {
-    if (!videoRef.current || !onMultiFrameSnapshot) return;
-    
-    setIsCapturingSnapshots(true);
-    const video = videoRef.current;
-    const originalTime = video.currentTime;
-    
-    try {
-      const snapshots: FrameSnapshot[] = [];
-      const interval = duration / (snapshotCount + 1);
-      
-      for (let i = 1; i <= snapshotCount; i++) {
-        const timestamp = interval * i;
-        video.currentTime = timestamp;
-        
-        // Wait for seek
-        await new Promise<void>((resolve) => {
-          const onSeeked = () => {
-            video.removeEventListener('seeked', onSeeked);
-            resolve();
-          };
-          video.addEventListener('seeked', onSeeked);
-        });
-        
-        // Detect pose
-        const pose = await poseDetectionService.detectPoseFrame(video);
-        
-        // Calculate angles
-        const angles = pose ? poseDetectionService.analyzePoseGeometry(pose).keyAngles : [];
-        
-        // Create canvas with skeleton and angles
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        
-        if (ctx) {
-          // Draw video frame
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          
-          // Draw skeleton and angles if pose detected
-          if (pose) {
-            poseDetectionService.drawSkeleton(ctx, pose);
-            drawAnglesOnCanvas(ctx, pose, angles, canvas.width, canvas.height);
-          }
-          
-          const frameImage = canvas.toDataURL('image/jpeg', 0.9);
-          
-          snapshots.push({
-            frameImage,
-            timestamp,
-            pose,
-            angles
-          });
-        }
-      }
-      
-      // Restore original time
-      video.currentTime = originalTime;
-      
-      // Send snapshots to parent
-      onMultiFrameSnapshot(snapshots);
-      
-    } catch (error) {
-      console.error("Multi-snapshot capture failed:", error);
-    } finally {
-      setIsCapturingSnapshots(false);
-    }
-  };
-
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
@@ -356,14 +549,29 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
   return (
     <div className="w-full flex flex-col gap-4">
       {/* Video Display Area */}
-      <div 
+      <div className="flex items-center justify-between px-2">
+        <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+          <Activity size={16} className="text-blue-500" />
+          {label}
+        </h3>
+        {videoSrc && (
+          <button
+            onClick={() => setVideoSrc(null)}
+            className="text-xs text-red-400 hover:text-red-300"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+
+      <div
         ref={videoContainerRef}
         className="relative w-full bg-slate-800 rounded-xl overflow-hidden shadow-2xl border border-slate-700 aspect-video group"
       >
         {!videoSrc ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
             <Upload size={48} className="mb-4 opacity-50" />
-            <p className="text-lg font-medium">Upload a video to begin analysis</p>
+            <p className="text-lg font-medium">Upload {label}</p>
             <p className="text-sm opacity-60">Supports MP4, WebM</p>
             <input
               type="file"
@@ -389,7 +597,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
             {/* Skeleton Canvas Overlay */}
             <canvas
               ref={canvasRef}
-              className="absolute inset-0 w-full h-full pointer-events-none"
+              style={canvasStyle}
+              className="absolute pointer-events-none"
             />
 
             {/* Fullscreen Button Overlay */}
@@ -455,27 +664,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
             >
               {isPlaying ? <Pause size={18} className="sm:w-5 sm:h-5" /> : <Play size={18} className="sm:w-5 sm:h-5" />}
             </button>
-            <button
-              onClick={() => {
-                if (videoRef.current) videoRef.current.currentTime = 0;
-              }}
-              disabled={!videoSrc}
-              className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50 transition-colors touch-manipulation"
-              title="Restart"
-            >
-              <RotateCcw size={18} className="sm:w-5 sm:h-5" />
-            </button>
           </div>
 
           {/* Display Toggles */}
           <div className="flex gap-2 justify-center">
             <button
               onClick={() => setShowSkeleton(!showSkeleton)}
-              className={`px-2 sm:px-3 py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-colors touch-manipulation ${
-                showSkeleton 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-slate-700 text-slate-400 hover:text-white'
-              }`}
+              className={`px-2 sm:px-3 py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-colors touch-manipulation ${showSkeleton
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-700 text-slate-400 hover:text-white'
+                }`}
               title="Toggle Skeleton"
             >
               <Activity size={14} className="inline mr-1 sm:w-4 sm:h-4" />
@@ -483,67 +681,19 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ onFrameCapture, onMultiFrameC
             </button>
             <button
               onClick={() => setShowAngles(!showAngles)}
-              className={`px-2 sm:px-3 py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-colors touch-manipulation ${
-                showAngles 
-                  ? 'bg-green-600 text-white' 
-                  : 'bg-slate-700 text-slate-400 hover:text-white'
-              }`}
+              className={`px-2 sm:px-3 py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-colors touch-manipulation ${showAngles
+                ? 'bg-green-600 text-white'
+                : 'bg-slate-700 text-slate-400 hover:text-white'
+                }`}
               title="Toggle Angles"
             >
               ° Angles
             </button>
           </div>
-
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
-            {/* Snapshot Controls */}
-            <select
-              value={snapshotCount}
-              onChange={(e) => setSnapshotCount(Number(e.target.value))}
-              className="bg-slate-700 text-white text-xs px-2 py-2 rounded-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-500 touch-manipulation"
-              title="Number of snapshots"
-            >
-              <option value={3}>3 frames</option>
-              <option value={5}>5 frames</option>
-              <option value={7}>7 frames</option>
-              <option value={10}>10 frames</option>
-            </select>
-
-            <div className="flex gap-2">
-              <button
-                onClick={handleMultiSnapshot}
-                disabled={!videoSrc || isCapturingSnapshots || isAnalyzing}
-                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all touch-manipulation ${
-                  isCapturingSnapshots || isAnalyzing
-                    ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                    : 'bg-purple-600 hover:bg-purple-500 text-white active:scale-95'
-                }`}
-                title="Capture multiple snapshots"
-              >
-                <Camera size={16} className="sm:w-[18px] sm:h-[18px]" />
-                <span className="hidden sm:inline">{isCapturingSnapshots ? 'Capturing...' : 'Snapshots'}</span>
-                <span className="sm:hidden">{isCapturingSnapshots ? 'Wait...' : 'Snap'}</span>
-              </button>
-
-              <button
-                onClick={handleCapture}
-                disabled={!videoSrc || isAnalyzing || isCapturingSnapshots}
-                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all touch-manipulation ${
-                  isAnalyzing || isCapturingSnapshots
-                    ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-900/20 active:scale-95'
-                }`}
-                title="Analyze current frame"
-              >
-                <Camera size={18} className="sm:w-5 sm:h-5" />
-                {isAnalyzing ? 'Analyzing...' : 'Analyze'}
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
   );
-};
+});
 
 export default VideoPlayer;

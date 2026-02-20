@@ -274,7 +274,7 @@ class PoseDetectionService {
         const rightArmRaised = rightWrist.y < rightShoulder.y - 0.1;
         const leftArmRaised = leftWrist.y < leftShoulder.y - 0.1;
         const armExtended = rightElbowAngle > 140 || leftElbowAngle > 140;
-        
+
         if ((rightArmRaised || leftArmRaised) && armExtended) {
             return "Overhand Throw";
         }
@@ -282,7 +282,7 @@ class PoseDetectionService {
         // UNDERHAND THROW DETECTION: Arm below hip, extended
         const rightArmLow = rightWrist.y > rightHip.y;
         const leftArmLow = leftWrist.y > leftHip.y;
-        
+
         if ((rightArmLow || leftArmLow) && armExtended) {
             return "Underhand Throw";
         }
@@ -290,7 +290,7 @@ class PoseDetectionService {
         // KICK DETECTION: One leg raised significantly, knee bent
         const rightLegRaised = rightKnee.y < rightHip.y - 0.15;
         const leftLegRaised = leftKnee.y < leftHip.y - 0.15;
-        
+
         if (rightLegRaised || leftLegRaised) {
             return "Kick";
         }
@@ -298,9 +298,15 @@ class PoseDetectionService {
         // CATCHING DETECTION: Both arms forward, elbows bent
         const armsForward = (rightElbow.y < shoulderY && leftElbow.y < shoulderY);
         const elbowsBent = (rightElbowAngle < 150 && leftElbowAngle < 150);
-        
+
         if (armsForward && elbowsBent) {
             return "Catching";
+        }
+
+        // HANDSTAND DETECTION: Hips passed above shoulders (Inversion)
+        // Note: In normalized coordinates, 0 is top. So Smaller Y = Higher up.
+        if (hipY < shoulderY - 0.05) {
+            return "Handstand";
         }
 
         // JUMPING DETECTION: Both knees bent, body elevated
@@ -620,6 +626,78 @@ class PoseDetectionService {
         }
 
         return poseData;
+    }
+    async findPeakMoment(videoElement: HTMLVideoElement): Promise<{ bestTime: number; score: number }> {
+        const duration = videoElement.duration;
+        const step = 0.5; // Check every 0.5 seconds
+        let bestTime = 0;
+        let maxScore = -1;
+
+        console.log("🔍 Smart Search: Scanning video for peak action...");
+
+        for (let t = 0; t < duration; t += step) {
+            // Detect pose at time t
+            // Note: detectPoseFromVideo creates a new request. 
+            // We need to ensure the video element is seeked or use detectForVideo timestamp?
+            // MediaPipe video mode expects sequential frames usually.
+            // But here we are skipping. Randomized access might be better served by 'detectPoseFrame' after seeking.
+            // Seeking is slow. 
+            // Better approach: Let's trust 'detectPoseFromVideo' with explicit timestamp?
+            // Actually, MediaPipe Video mode requires sequential timestamps. 
+            // If we skip, we might break internal tracking. 
+            // Safe bet: Use 'detectPoseFrame' (Image mode) but we need to seek the video element.
+
+            // Seeking the video element in a loop is very slow because we have to wait for 'seeked'.
+            // Optimization: We will try to rely on MediaPipe's ability to handle gaps if we verify it works, 
+            // OR just accept the seek delay for "Smart Search" which is an explicit user action.
+
+            videoElement.currentTime = t;
+            await new Promise<void>(resolve => {
+                const onSeeked = () => { videoElement.removeEventListener('seeked', onSeeked); resolve(); };
+                videoElement.addEventListener('seeked', onSeeked);
+            });
+
+            const pose = await this.detectPoseFrame(videoElement);
+
+            if (pose && pose.worldLandmarks) {
+                const lm = pose.worldLandmarks;
+                const headY = (lm[0].y + lm[2].y + lm[5].y) / 3; // Nose, eyes
+                const hipY = (lm[23].y + lm[24].y) / 2; // Hips
+
+                // Score 1: Inversion (Head below hips) based on Y coordinate
+                // In World Landmarks, Y is vertical? MediaPipe World: Y is gravity aligned?
+                // Actually MediaPipe World: Y is down? NO, Y is up?
+                // Let's use Normalized Landmarks for easier logic (0 top, 1 bottom)
+                // In Normalized: Head (y < hip y) = Upright. Head (y > hip y) = Inverted?
+                // Wait, 0 is TOP. So Head Y (0.1) < Hip Y (0.5) is UPRIGHT.
+                // Head Y (0.8) > Hip Y (0.5) is INVERTED.
+
+                const nlm = pose.landmarks;
+                const nHeadY = (nlm[0].y + nlm[2].y + nlm[5].y) / 3;
+                const nHipY = (nlm[23].y + nlm[24].y) / 2;
+
+                let score = 0;
+
+                // INVERSION BONUS
+                if (nHeadY > nHipY) {
+                    score += 50; // Huge bonus for inversion (Handstand/Cartwheel)
+                    score += (nHeadY - nHipY) * 100; // Deeper inversion = better
+                }
+
+                // VISIBILITY/ACTIVITY BONUS
+                // Check if limbs are extended/visible
+                const visibleCount = nlm.filter(l => l.visibility && l.visibility > 0.6).length;
+                score += visibleCount;
+
+                if (score > maxScore) {
+                    maxScore = score;
+                    bestTime = t;
+                }
+            }
+        }
+
+        console.log(`✅ Smart Search Found Peak at ${bestTime.toFixed(2)}s (Score: ${maxScore.toFixed(0)})`);
+        return { bestTime, score: maxScore };
     }
 }
 
