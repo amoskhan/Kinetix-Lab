@@ -21,6 +21,7 @@ const App: React.FC = () => {
   const [userDeclaredSkill, setUserDeclaredSkill] = useState<string>('');
   const [captureWindow, setCaptureWindow] = useState<number>(5);
   const [smartSearch, setSmartSearch] = useState(true);
+  const [loadingMessage, setLoadingMessage] = useState<string>('');
 
   // --- Snapshot State ---
   // Assuming FrameSnapshot and related state are not part of this change,
@@ -207,18 +208,22 @@ const App: React.FC = () => {
     setAnalysisResult(null);
 
     try {
+      setLoadingMessage("Preparing cameras...");
       const mode = viewMode;
       const playerIds = mode === 'single' ? ['main'] : ['front', 'side'];
+
+      const isMobile = window.innerWidth <= 768 || ('ontouchstart' in window);
+      const effectiveCaptureWindow = isMobile ? Math.min(captureWindow, 5) : captureWindow;
+
+      if (isMobile && captureWindow > 5) {
+        console.log(`[Mobile Optimization] Capping frame count from ${captureWindow} to 5 for speed.`);
+      }
 
       const peakTimes: Record<string, number> = {};
 
       // 1. Smart Search (Auto-Seek)
       if (smartSearch) {
-        // We can't easily change text of 'status' enum without breaking types/UI, 
-        // so we'll just log and rely on the UI loader. 
-        // Ideally we'd have a separate status or toast.
-        console.log("🔍 Smart Search Enabled: Finding peak action...");
-
+        setLoadingMessage("Finding peak action...");
         // Scan each player for best moment
         for (const id of playerIds) {
           const player = playerRefs.current[id];
@@ -261,7 +266,8 @@ const App: React.FC = () => {
               });
             }
           } else {
-            console.log(`Capturing ${captureWindow} frames for ${id}...`);
+            setLoadingMessage(`Extracting frames (${id === 'main' ? '' : id})...`);
+            console.log(`Capturing ${effectiveCaptureWindow} frames for ${id}...`);
 
             // Default to covering the entire video to ensure "totality" of phases
             // unless smart search is extremely confident (but user requested totality).
@@ -271,7 +277,7 @@ const App: React.FC = () => {
 
             if (video && video.duration > 0 && !isNaN(video.duration) && video.duration !== Infinity) {
               // Distribute frames across the whole duration
-              interval = video.duration / captureWindow;
+              interval = video.duration / effectiveCaptureWindow;
               centerTime = video.duration / 2;
               console.log(`[App] Full Video Capture: Duration=${video.duration.toFixed(2)}s, Interval=${interval.toFixed(2)}s, Center=${centerTime.toFixed(2)}s`);
             } else {
@@ -283,7 +289,7 @@ const App: React.FC = () => {
             // but for "Analysis" of the whole movement, uniform distribution is safer for phase detection.
             // We'll stick to full video coverage as requested.
 
-            const data = await player.captureMultiFrames(captureWindow, interval, centerTime);
+            const data = await player.captureMultiFrames(effectiveCaptureWindow, interval, centerTime);
             if (data) {
               views.push({
                 label: id === 'main' ? 'Main View' : (id === 'front' ? 'Front View' : 'Side View'),
@@ -299,12 +305,11 @@ const App: React.FC = () => {
         throw new Error("No video input detected. Please upload a video first.");
       }
 
-      console.log(`🧠 Analyzing ${views.length} views with ${captureWindow} frames each...`);
-
-      let result: AnalysisResponse;
+      setLoadingMessage("AI is thinking (takes ~15s)...");
+      console.log(`🧠 Analyzing ${views.length} views with ${effectiveCaptureWindow} frames each...`);
 
       // Ensure we call the new multi-view function which handles frames[] correctly
-      result = await analyzeMultiViewMovement({
+      const result = await analyzeMultiViewMovement({
         views: views,
         userDeclaredSkill
       });
@@ -472,7 +477,7 @@ const App: React.FC = () => {
                   {status === AnalysisStatus.ANALYZING ? (
                     <>
                       <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Processing...
+                      {loadingMessage || 'Processing...'}
                     </>
                   ) : (
                     <>

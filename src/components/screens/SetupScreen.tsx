@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, Square, Grid } from 'lucide-react';
+import { Layers, Square, Grid, Activity } from 'lucide-react';
 import { ViewMode } from '../../types';
 
 interface SetupScreenProps {
@@ -47,7 +47,13 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ setViewMode, setCaptureWindow
                             <span className="text-xs font-mono text-slate-500 group-hover:text-purple-400">PRO</span>
                         </div>
                         <h3 className="text-lg font-semibold text-white mb-2">Dual View</h3>
-                        <p className="text-sm text-slate-400">Sync Front & Side views for 3D biomechanics.</p>
+                        <p className="text-sm text-slate-400 mb-2">Sync Front & Side views for 3D biomechanics.</p>
+                        {window.innerWidth <= 768 && (
+                            <div className="text-[10px] font-mono text-blue-400 flex items-center gap-1">
+                                <Activity size={10} />
+                                Optimized for mobile (5-frame capture)
+                            </div>
+                        )}
                     </button>
                 </div>
             </div>
