@@ -1,7 +1,6 @@
-import React, { useRef, useMemo } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Grid, Line, Sphere } from '@react-three/drei';
-import * as THREE from 'three';
+import React, { useMemo } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, Grid, Line } from '@react-three/drei';
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
 
 // MediaPipe POSE_CONNECTIONS — same as used in poseDetectionService
@@ -128,12 +127,6 @@ function SkeletonBones({ worldLandmarks }: SkeletonBonesProps) {
             })}
         </>
     );
-}
-
-function AutoRotateCamera() {
-    const controlled = useRef(false);
-    // Auto-rotate is handled by OrbitControls autoRotate prop
-    return null;
 }
 
 interface Skeleton3DViewerProps {
