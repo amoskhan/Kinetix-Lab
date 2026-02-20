@@ -370,18 +370,15 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
             drawSym(11, 12, symmetry.shouldersLevel); // Shoulders
             drawSym(23, 24, symmetry.hipsLevel);       // Hips
 
-            // Calculate and display angles (Legacy/Visual)
-            const angles = poseDetectionService.analyzePoseGeometry(livePose).keyAngles;
-            setCurrentAngles(angles);
+            // Notify parent component & Update state
+            setCurrentAngles(angs);
+            if (onPoseUpdate) {
+              onPoseUpdate(livePose, angs);
+            }
 
             // Draw numerical angles on canvas if enabled
             if (showAngles) {
-              drawAnglesOnCanvas(ctx, livePose, angles, canvas.width, canvas.height);
-            }
-
-            // Notify parent component
-            if (onPoseUpdate) {
-              onPoseUpdate(livePose, angles);
+              drawAnglesOnCanvas(ctx, livePose, angs, canvas.width, canvas.height);
             }
           } else {
             setCurrentAngles([]);

@@ -238,19 +238,19 @@ class PoseDetectionService {
     }
 
     detectMovementType(landmarks: NormalizedLandmark[], angles: { joint: string; angle: number }[]): string {
-        // Extract key landmarks
-        const rightShoulder = landmarks[11];
-        const leftShoulder = landmarks[12];
-        const rightElbow = landmarks[13];
-        const leftElbow = landmarks[14];
-        const rightWrist = landmarks[15];
-        const leftWrist = landmarks[16];
-        const rightHip = landmarks[23];
-        const leftHip = landmarks[24];
-        const rightKnee = landmarks[25];
-        const leftKnee = landmarks[26];
-        const rightAnkle = landmarks[27];
-        const leftAnkle = landmarks[28];
+        // Extract key landmarks (Using standard MediaPipe: 11=L, 12=R)
+        const leftShoulder = landmarks[11];
+        const rightShoulder = landmarks[12];
+        const leftElbow = landmarks[13];
+        const rightElbow = landmarks[14];
+        const leftWrist = landmarks[15];
+        const rightWrist = landmarks[16];
+        const leftHip = landmarks[23];
+        const rightHip = landmarks[24];
+        const leftKnee = landmarks[25];
+        const rightKnee = landmarks[26];
+        const leftAnkle = landmarks[27];
+        const rightAnkle = landmarks[28];
 
         // Get angles
         const rightKneeAngle = angles.find(a => a.joint === 'Right Knee')?.angle || 180;
@@ -320,29 +320,29 @@ class PoseDetectionService {
     private calculateJointAngles(landmarks: NormalizedLandmark[]) {
         const angles = [];
 
-        // Right elbow
-        const rightElbow = this.calculateAngle(landmarks[11], landmarks[13], landmarks[15]);
-        if (!isNaN(rightElbow)) angles.push({ joint: 'Right Elbow', angle: Math.round(rightElbow) });
-
-        // Left elbow
-        const leftElbow = this.calculateAngle(landmarks[12], landmarks[14], landmarks[16]);
+        // Left elbow (11-13-15)
+        const leftElbow = this.calculateAngle(landmarks[11], landmarks[13], landmarks[15]);
         if (!isNaN(leftElbow)) angles.push({ joint: 'Left Elbow', angle: Math.round(leftElbow) });
 
-        // Right knee
-        const rightKnee = this.calculateAngle(landmarks[23], landmarks[25], landmarks[27]);
-        if (!isNaN(rightKnee)) angles.push({ joint: 'Right Knee', angle: Math.round(rightKnee) });
+        // Right elbow (12-14-16)
+        const rightElbow = this.calculateAngle(landmarks[12], landmarks[14], landmarks[16]);
+        if (!isNaN(rightElbow)) angles.push({ joint: 'Right Elbow', angle: Math.round(rightElbow) });
 
-        // Left knee
-        const leftKnee = this.calculateAngle(landmarks[24], landmarks[26], landmarks[28]);
+        // Left knee (23-25-27)
+        const leftKnee = this.calculateAngle(landmarks[23], landmarks[25], landmarks[27]);
         if (!isNaN(leftKnee)) angles.push({ joint: 'Left Knee', angle: Math.round(leftKnee) });
 
-        // Right shoulder
-        const rightShoulder = this.calculateAngle(landmarks[11], landmarks[13], landmarks[23]);
-        if (!isNaN(rightShoulder)) angles.push({ joint: 'Right Shoulder', angle: Math.round(rightShoulder) });
+        // Right knee (24-26-28)
+        const rightKnee = this.calculateAngle(landmarks[24], landmarks[26], landmarks[28]);
+        if (!isNaN(rightKnee)) angles.push({ joint: 'Right Knee', angle: Math.round(rightKnee) });
 
-        // Left shoulder  
-        const leftShoulder = this.calculateAngle(landmarks[12], landmarks[14], landmarks[24]);
+        // Left shoulder
+        const leftShoulder = this.calculateAngle(landmarks[23], landmarks[11], landmarks[13]);
         if (!isNaN(leftShoulder)) angles.push({ joint: 'Left Shoulder', angle: Math.round(leftShoulder) });
+
+        // Right shoulder  
+        const rightShoulder = this.calculateAngle(landmarks[24], landmarks[12], landmarks[14]);
+        if (!isNaN(rightShoulder)) angles.push({ joint: 'Right Shoulder', angle: Math.round(rightShoulder) });
 
         return angles;
     }
