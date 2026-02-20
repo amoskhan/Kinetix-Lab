@@ -4,8 +4,6 @@
 
 KinetixLab leverages Google's Gemini 2.0 AI and Computer Vision (MediaPipe) to provide professional-grade movement analysis. It supports single and dual-camera workflows to decompose complex movements into actionable feedback, aligned with biomechanical principles and MOE PE standards.
 
-[Deploy to Vercel](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Famoskhan%2FKinetix-Lab)
-
 ---
 
 ## ✨ Key Features
@@ -63,12 +61,6 @@ KinetixLab leverages Google's Gemini 2.0 AI and Computer Vision (MediaPipe) to p
 -   **PDF Generation:** jsPDF, html2canvas
 -   **Backend / Storage:** Supabase (PostgreSQL), LocalStorage API
 
----
-
-## 📖 Documentation
-
--   [Deployment Guide](./DEPLOYMENT.md) - How to deploy your own instance.
--   [Product Spec](./.kiro/steering/product.md) - Detailed feature breakdown.
 
 ---
 
