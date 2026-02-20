@@ -19,7 +19,12 @@ const App: React.FC = () => {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [userDeclaredSkill, setUserDeclaredSkill] = useState<string>('');
-  const [captureWindow, setCaptureWindow] = useState<number>(5);
+  const [captureWindow, setCaptureWindow] = useState<number>(() => {
+    // Smart default: 10 on desktop for "Pro" detail, 5 on mobile for speed
+    if (typeof window === 'undefined') return 5;
+    const isMobile = window.innerWidth <= 768 || ('ontouchstart' in window);
+    return isMobile ? 5 : 10;
+  });
   const [smartSearch, setSmartSearch] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
 
@@ -213,19 +218,25 @@ const App: React.FC = () => {
       const playerIds = mode === 'single' ? ['main'] : ['front', 'side'];
 
       const isMobile = window.innerWidth <= 768 || ('ontouchstart' in window);
-      const effectiveCaptureWindow = isMobile ? Math.min(captureWindow, 5) : captureWindow;
+
+      // Use the exact capture window requested by user (pro quality)
+      // but warn on mobile if it's high
+      const effectiveCaptureWindow = captureWindow;
 
       if (isMobile && captureWindow > 5) {
-        console.log(`[Mobile Optimization] Capping frame count from ${captureWindow} to 5 for speed.`);
+        setLoadingMessage("Extracting frames (high-detail - may be slow)...");
+        console.log(`[Mobile] High detail mode enabled: ${captureWindow} frames. Upload may take longer.`);
+      } else if (!isMobile) {
+        console.log(`[Desktop] Professional quality enabled: ${captureWindow} frames.`);
       }
 
       const peakTimes: Record<string, number> = {};
 
       // 1. Smart Search (Auto-Seek)
       if (smartSearch) {
-        setLoadingMessage("Finding peak action...");
         // Scan each player for best moment
         for (const id of playerIds) {
+          setLoadingMessage(`Finding activity (${id === 'main' ? 'View' : id})...`);
           const player = playerRefs.current[id];
           if (player) {
             const peak = await player.findPeak();
@@ -335,9 +346,12 @@ const App: React.FC = () => {
       saveToHistory(result, thumbnail);
 
     } catch (error: any) {
-      console.error(error);
+      console.error("[App] Analysis failed:", error);
       setStatus(AnalysisStatus.ERROR);
       setErrorMessage(error.message || "Analysis failed.");
+    } finally {
+      setLoadingMessage('');
+      console.log("[App] Global analysis flow completed.");
     }
   };
 

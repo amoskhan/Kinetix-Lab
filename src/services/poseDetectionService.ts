@@ -629,75 +629,94 @@ class PoseDetectionService {
     }
     async findPeakMoment(videoElement: HTMLVideoElement): Promise<{ bestTime: number; score: number }> {
         const duration = videoElement.duration;
-        const step = 0.5; // Check every 0.5 seconds
-        let bestTime = 0;
-        let maxScore = -1;
+        const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || ('ontouchstart' in window));
 
-        console.log("🔍 Smart Search: Scanning video for peak action...");
+        // --- Pass 1: Coarse Scan --- 
+        // We scan the whole video with wide steps to find the "hot zone"
+        const coarseStep = isMobile ? Math.max(2.0, duration / 10) : 1.5;
+        let bestCoarseTime = 0;
+        let maxCoarseScore = -1;
 
-        for (let t = 0; t < duration; t += step) {
-            // Detect pose at time t
-            // Note: detectPoseFromVideo creates a new request. 
-            // We need to ensure the video element is seeked or use detectForVideo timestamp?
-            // MediaPipe video mode expects sequential frames usually.
-            // But here we are skipping. Randomized access might be better served by 'detectPoseFrame' after seeking.
-            // Seeking is slow. 
-            // Better approach: Let's trust 'detectPoseFromVideo' with explicit timestamp?
-            // Actually, MediaPipe Video mode requires sequential timestamps. 
-            // If we skip, we might break internal tracking. 
-            // Safe bet: Use 'detectPoseFrame' (Image mode) but we need to seek the video element.
+        console.log(`🔍 Smart Search Pass 1 (Coarse): Scanning every ${coarseStep.toFixed(1)}s...`);
 
-            // Seeking the video element in a loop is very slow because we have to wait for 'seeked'.
-            // Optimization: We will try to rely on MediaPipe's ability to handle gaps if we verify it works, 
-            // OR just accept the seek delay for "Smart Search" which is an explicit user action.
+        const scanFrame = async (t: number) => {
+            // Optimization: If we are already at this time, don't wait for seeked
+            if (Math.abs(videoElement.currentTime - t) < 0.05) {
+                const pose = await this.detectPoseFrame(videoElement);
+                return this.calculatePeakScore(pose);
+            }
 
             videoElement.currentTime = t;
             await new Promise<void>(resolve => {
-                const onSeeked = () => { videoElement.removeEventListener('seeked', onSeeked); resolve(); };
+                let resolved = false;
+                const onSeeked = () => {
+                    if (resolved) return;
+                    resolved = true;
+                    videoElement.removeEventListener('seeked', onSeeked);
+                    resolve();
+                };
                 videoElement.addEventListener('seeked', onSeeked);
+                // Safety Timeout: 3 seconds
+                setTimeout(onSeeked, 3000);
             });
 
             const pose = await this.detectPoseFrame(videoElement);
+            return this.calculatePeakScore(pose);
+        };
 
-            if (pose && pose.worldLandmarks) {
-                const lm = pose.worldLandmarks;
-                const headY = (lm[0].y + lm[2].y + lm[5].y) / 3; // Nose, eyes
-                const hipY = (lm[23].y + lm[24].y) / 2; // Hips
-
-                // Score 1: Inversion (Head below hips) based on Y coordinate
-                // In World Landmarks, Y is vertical? MediaPipe World: Y is gravity aligned?
-                // Actually MediaPipe World: Y is down? NO, Y is up?
-                // Let's use Normalized Landmarks for easier logic (0 top, 1 bottom)
-                // In Normalized: Head (y < hip y) = Upright. Head (y > hip y) = Inverted?
-                // Wait, 0 is TOP. So Head Y (0.1) < Hip Y (0.5) is UPRIGHT.
-                // Head Y (0.8) > Hip Y (0.5) is INVERTED.
-
-                const nlm = pose.landmarks;
-                const nHeadY = (nlm[0].y + nlm[2].y + nlm[5].y) / 3;
-                const nHipY = (nlm[23].y + nlm[24].y) / 2;
-
-                let score = 0;
-
-                // INVERSION BONUS
-                if (nHeadY > nHipY) {
-                    score += 50; // Huge bonus for inversion (Handstand/Cartwheel)
-                    score += (nHeadY - nHipY) * 100; // Deeper inversion = better
-                }
-
-                // VISIBILITY/ACTIVITY BONUS
-                // Check if limbs are extended/visible
-                const visibleCount = nlm.filter(l => l.visibility && l.visibility > 0.6).length;
-                score += visibleCount;
-
-                if (score > maxScore) {
-                    maxScore = score;
-                    bestTime = t;
-                }
+        for (let t = 0; t < duration; t += coarseStep) {
+            console.log(`[PeakSearch] Coarse scan frame at ${t.toFixed(1)}s...`);
+            const score = await scanFrame(t);
+            if (score > maxCoarseScore) {
+                maxCoarseScore = score;
+                bestCoarseTime = t;
             }
         }
 
-        console.log(`✅ Smart Search Found Peak at ${bestTime.toFixed(2)}s (Score: ${maxScore.toFixed(0)})`);
-        return { bestTime, score: maxScore };
+        // --- Pass 2: Fine Scan ---
+        // We zoom into the best coarse window and scan with high precision
+        const fineStep = isMobile ? 0.25 : 0.1; // 0.1s precision on desktop!
+        const searchWindow = coarseStep; // Scan the area around the coarse winner
+        const fineStart = Math.max(0, bestCoarseTime - searchWindow);
+        const fineEnd = Math.min(duration, bestCoarseTime + searchWindow);
+
+        let bestFineTime = bestCoarseTime;
+        let maxFineScore = maxCoarseScore;
+
+        console.log(`🎯 Smart Search Pass 2 (Fine): Zooming into ${fineStart.toFixed(1)}s-${fineEnd.toFixed(1)}s (step: ${fineStep}s)...`);
+
+        for (let t = fineStart; t <= fineEnd; t += fineStep) {
+            // Skip the one we already checked in Coarse Pass
+            if (Math.abs(t - bestCoarseTime) < 0.05) continue;
+
+            console.log(`[PeakSearch] Fine scan frame at ${t.toFixed(1)}s...`);
+            const score = await scanFrame(t);
+            if (score > maxFineScore) {
+                maxFineScore = score;
+                bestFineTime = t;
+            }
+        }
+
+        console.log(`✅ Smart Search Found Peak at ${bestFineTime.toFixed(2)}s (Score: ${maxFineScore.toFixed(0)})`);
+        return { bestTime: bestFineTime, score: maxFineScore };
+    }
+    private calculatePeakScore(pose: PoseData | null): number {
+        if (!pose || !pose.landmarks) return -1;
+
+        const nlm = pose.landmarks;
+        const nHeadY = (nlm[0].y + nlm[2].y + nlm[5].y) / 3;
+        const nHipY = (nlm[23].y + nlm[24].y) / 2;
+
+        let score = 0;
+        // INVERSION BONUS
+        if (nHeadY > nHipY) {
+            score += 50;
+            score += (nHeadY - nHipY) * 100;
+        }
+        // VISIBILITY/ACTIVITY BONUS
+        const visibleCount = nlm.filter(l => (l.visibility ?? 0) > 0.6).length;
+        score += visibleCount;
+        return score;
     }
 }
 
