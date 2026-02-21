@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Grid, Line } from '@react-three/drei';
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
@@ -137,18 +137,88 @@ export default function Skeleton3DViewer({ worldLandmarks }: Skeleton3DViewerPro
     console.log("Rendering Skeleton3DViewer", !!worldLandmarks);
     const hasPose = worldLandmarks && worldLandmarks.length > 0;
 
+    // Recording State
+    const [isRecording, setIsRecording] = useState(false);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const renderChunksRef = useRef<Blob[]>([]);
+
+    const handleCanvasCreated = useCallback((state: any) => {
+        const canvas = state.gl.domElement;
+
+        // Try mp4 first, then webm
+        let mimeType = 'video/mp4';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+            mimeType = 'video/webm';
+        }
+
+        try {
+            const stream = canvas.captureStream(30); // 30 FPS
+            const options = { mimeType };
+            const mediaRecorder = new MediaRecorder(stream, options);
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    renderChunksRef.current.push(e.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(renderChunksRef.current, { type: mimeType });
+                renderChunksRef.current = [];
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const ext = mimeType === 'video/mp4' ? 'mp4' : 'webm';
+                a.download = `kinetix-3d-skeleton.${ext}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            mediaRecorderRef.current = mediaRecorder;
+        } catch (error) {
+            console.error("Error setting up MediaRecorder for 3D Canvas:", error);
+        }
+    }, []);
+
+    const toggleRecording = useCallback(() => {
+        if (!mediaRecorderRef.current) return;
+
+        if (isRecording) {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+        } else {
+            renderChunksRef.current = []; // Clear previous
+            mediaRecorderRef.current.start(100); // Collect data every 100ms
+            setIsRecording(true);
+        }
+    }, [isRecording]);
+
     return (
-        <div className="relative w-full h-56 sm:h-64 bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
+        <div className="relative w-full h-56 sm:h-64 bg-slate-900 rounded-xl border border-slate-700 overflow-hidden group">
             {/* Label */}
             <div className="absolute top-2 left-3 z-10 flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
                 <span className="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">3D Skeleton</span>
             </div>
 
-            {/* Color legend */}
-            <div className="absolute top-2 right-3 z-10 flex items-center gap-3 text-[9px] font-mono text-slate-500">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-cyan-400 inline-block" />Left</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />Right</span>
+            {/* Color legend & Record Button */}
+            <div className="absolute top-2 right-3 z-10 flex items-center gap-3">
+                <div className="flex items-center gap-3 text-[9px] font-mono text-slate-500">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-cyan-400 inline-block" />Left</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />Right</span>
+                </div>
+
+                {/* Record Button */}
+                <button
+                    onClick={toggleRecording}
+                    className={`flex items-center justify-center w-6 h-6 rounded-full transition-colors ${isRecording ? 'bg-red-500/20 animate-pulse' : 'bg-slate-800 hover:bg-slate-700'
+                        }`}
+                    title={isRecording ? "Stop Recording 3D Viewer" : "Record 3D Viewer"}
+                >
+                    <div className={`w-2.5 h-2.5 rounded-full ${isRecording ? 'bg-red-500 rounded-sm' : 'bg-red-500'}`} />
+                </button>
             </div>
 
             {!hasPose && (
@@ -158,9 +228,10 @@ export default function Skeleton3DViewer({ worldLandmarks }: Skeleton3DViewerPro
             )}
 
             <Canvas
+                onCreated={handleCanvasCreated}
                 camera={{ position: [0, 1.2, 5], fov: 45 }}
                 style={{ background: 'transparent' }}
-                gl={{ antialias: true, alpha: true }}
+                gl={{ antialias: true, alpha: true, preserveDrawingBuffer: true }}
             >
                 {/* Lighting */}
                 <ambientLight intensity={0.6} />

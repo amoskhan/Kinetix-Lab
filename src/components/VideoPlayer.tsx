@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
-import { Upload, Play, Pause, Maximize, Minimize, Activity, Box } from 'lucide-react';
+import { Upload, Play, Pause, Maximize, Minimize, Activity, Box, Download } from 'lucide-react';
 import { captureVideoFrame, captureMultipleFrames, MultiFrameCapture } from '../utils/fileUtils';
 import { PoseData, poseDetectionService } from '../services/poseDetectionService';
 import { getCenterOfMass, analyzeSymmetry, calculateAllJointAngles, formatTelemetryForPrompt, drawJointAngleStats } from '../utils/biomechanics';
@@ -43,6 +43,8 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
   const [show3D, setShow3D] = useState(false);
   const [currentAngles, setCurrentAngles] = useState<{ joint: string; angle: number }[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
   const [canvasStyle, setCanvasStyle] = useState<React.CSSProperties>({});
   // Stores the latest world landmarks for the 3D viewer
   const latestWorldLandmarksRef = useRef<NormalizedLandmark[] | null>(null);
@@ -138,6 +140,89 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
     },
     getVideoElement: () => videoRef.current
   }));
+
+  const exportAnglesCSV = async () => {
+    if (!videoRef.current || isExporting) return;
+
+    setIsExporting(true);
+    setExportProgress(0);
+
+    const video = videoRef.current;
+    const originalTime = video.currentTime;
+    const wasPlaying = isPlaying;
+
+    if (wasPlaying) {
+      video.pause();
+      setIsPlaying(false);
+    }
+
+    try {
+      const duration = video.duration;
+      const fps = 5; // Extract 5 frames per second
+      const step = 1 / fps;
+
+      let csvContent = "Time (s),Left Shoulder,Right Shoulder,Left Elbow,Right Elbow,Left Hip,Right Hip,Left Knee,Right Knee,Left Ankle,Right Ankle\n";
+
+      const totalSteps = Math.floor(duration / step);
+      let currentStep = 0;
+
+      for (let t = 0; t <= duration; t += step) {
+        video.currentTime = t;
+
+        // Wait for video to seek
+        await new Promise<void>(resolve => {
+          const onSeeked = () => {
+            video.removeEventListener('seeked', onSeeked);
+            resolve();
+          };
+          video.addEventListener('seeked', onSeeked);
+        });
+
+        // Small delay to ensure frame is ready for processing
+        await new Promise(r => setTimeout(r, 50));
+
+        const pose = await poseDetectionService.detectPoseFrame(video);
+
+        let row = `${t.toFixed(2)}`;
+
+        if (pose && pose.landmarks) {
+          const angles = calculateAllJointAngles(pose.landmarks);
+
+          const getAngle = (name: string) => {
+            const found = angles.find(a => a.joint === name);
+            return found ? Math.round(found.angle) : '';
+          };
+
+          row += `,${getAngle('Left Shoulder')},${getAngle('Right Shoulder')},${getAngle('Left Elbow')},${getAngle('Right Elbow')},${getAngle('Left Hip')},${getAngle('Right Hip')},${getAngle('Left Knee')},${getAngle('Right Knee')},${getAngle('Left Ankle')},${getAngle('Right Ankle')}`;
+        } else {
+          row += ",,,,,,,,,,"; // Empty data if no pose found
+        }
+
+        csvContent += row + "\n";
+        currentStep++;
+        setExportProgress(Math.round((currentStep / totalSteps) * 100));
+      }
+
+      // Generate and download blob
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `kinetix-joint-angles.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+    } catch (error) {
+      console.error("Failed to export angles CSV:", error);
+    } finally {
+      video.currentTime = originalTime;
+      setIsExporting(false);
+      setExportProgress(0);
+      if (wasPlaying) togglePlay();
+    }
+  };
 
   // --- Helper Functions ---
 
@@ -722,6 +807,18 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
             >
               <Box size={13} className="sm:w-4 sm:h-4" />
               3D View
+            </button>
+            <button
+              onClick={exportAnglesCSV}
+              disabled={isExporting || !videoSrc}
+              className={`px-2 sm:px-3 py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-colors touch-manipulation flex items-center gap-1 ${isExporting
+                ? 'bg-amber-600 text-white cursor-wait'
+                : 'bg-slate-700 text-slate-400 hover:text-white disabled:opacity-50'
+                }`}
+              title="Export Joint Angles as CSV"
+            >
+              <Download size={13} className="sm:w-4 sm:h-4" />
+              {isExporting ? `Exporting ${exportProgress}%` : 'Export CSV'}
             </button>
           </div>
         </div>
