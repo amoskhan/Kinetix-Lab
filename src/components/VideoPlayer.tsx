@@ -1,11 +1,10 @@
 import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
-import { Upload, Play, Pause, Maximize, Minimize, Activity, Box, Video } from 'lucide-react';
+import { Upload, Play, Pause, Maximize, Minimize, Activity, Box } from 'lucide-react';
 import { captureVideoFrame, captureMultipleFrames, MultiFrameCapture } from '../utils/fileUtils';
 import { PoseData, poseDetectionService } from '../services/poseDetectionService';
 import { getCenterOfMass, analyzeSymmetry, calculateAllJointAngles, formatTelemetryForPrompt, drawJointAngleStats } from '../utils/biomechanics';
 import Skeleton3DViewer from './Skeleton3DViewer';
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
-import { saveAs } from 'file-saver';
 
 // Define the handle interface for the parent to communicate with
 export interface VideoPlayerHandle {
@@ -13,7 +12,6 @@ export interface VideoPlayerHandle {
   captureMultiFrames: (count?: number, interval?: number, startTimeOverride?: number) => Promise<{ capture: MultiFrameCapture; centerPose: PoseData | undefined } | null>;
   getVideoElement: () => HTMLVideoElement | null;
   findPeak: () => Promise<number>;
-  extractTimeSeriesData: (fps?: number) => Promise<any[] | null>;
 }
 
 export interface FrameSnapshot {
@@ -43,7 +41,6 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [showAngles, setShowAngles] = useState(true);
   const [show3D, setShow3D] = useState(false);
-  const [isRecording3D, setIsRecording3D] = useState(false);
   const [currentAngles, setCurrentAngles] = useState<{ joint: string; angle: number }[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [canvasStyle, setCanvasStyle] = useState<React.CSSProperties>({});
@@ -129,6 +126,8 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
 
       try {
         const { bestTime, score } = await poseDetectionService.findPeakMoment(videoRef.current);
+        // Note: We DO NOT seek here anymore to avoid "replaying" or jumping.
+        // We return the time, and the capture function will use it directly.
         console.log(`Smart Search found peak at ${bestTime}s (score: ${score})`);
         return bestTime;
       } catch (e) {
@@ -137,59 +136,10 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
         return originalTime;
       }
     },
-    extractTimeSeriesData: async (fps: number = 5) => {
-      if (!videoRef.current) return null;
-      const video = videoRef.current;
-      const originalTime = video.currentTime;
-      video.pause();
-      setIsPlaying(false);
-
-      const duration = video.duration;
-      if (!duration || isNaN(duration) || duration === Infinity) return null;
-
-      const expectedFrames = Math.floor(duration * fps);
-      const interval = 1 / fps;
-      const timeSeriesData: any[] = [];
-
-      for (let i = 0; i <= expectedFrames; i++) {
-        const time = i * interval;
-        if (time > duration) break;
-
-        video.currentTime = time;
-        // Wait for seeked event with fallback timeout
-        await new Promise(r => {
-          const onSeeked = () => { video.removeEventListener('seeked', onSeeked); r(null); };
-          video.addEventListener('seeked', onSeeked);
-          setTimeout(() => { video.removeEventListener('seeked', onSeeked); r(null); }, 200);
-        });
-
-        const livePose = await poseDetectionService.detectPoseFrame(video);
-        if (livePose && livePose.landmarks) {
-          const angs = calculateAllJointAngles(livePose.landmarks);
-          const row: any = { Time: time.toFixed(2) };
-          angs.forEach(a => {
-            row[a.joint] = Math.round(a.angle);
-          });
-          timeSeriesData.push(row);
-        }
-      }
-
-      video.currentTime = originalTime;
-      return timeSeriesData;
-    },
     getVideoElement: () => videoRef.current
   }));
 
   // --- Helper Functions ---
-
-  const handleRecordingComplete = (blob: Blob) => {
-    try {
-      saveAs(blob, `kinetix_3d_scan_${new Date().toISOString().slice(0, 10)}.webm`);
-    } catch (e) {
-      console.error("Failed to save 3D video. This might be unsupported on this device.", e);
-    }
-    setIsRecording3D(false);
-  };
 
   const updateCanvasLayout = () => {
     const video = videoRef.current;
@@ -773,19 +723,6 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
               <Box size={13} className="sm:w-4 sm:h-4" />
               3D View
             </button>
-            {show3D && (
-              <button
-                onClick={() => setIsRecording3D(!isRecording3D)}
-                className={`px-2 sm:px-3 py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-colors touch-manipulation flex items-center gap-1 ${isRecording3D
-                  ? 'bg-red-600/80 hover:bg-red-500 text-white animate-pulse border border-red-400'
-                  : 'glass-card text-slate-400 hover:text-white'
-                  }`}
-                title="Record 3D Skeleton Video"
-              >
-                <Video size={13} className="sm:w-4 sm:h-4" />
-                {isRecording3D ? 'Stop Rec' : 'Rec 3D'}
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -793,11 +730,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
       {/* 3D Skeleton Viewer Panel */}
       {show3D && (
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <Skeleton3DViewer
-            worldLandmarks={worldLandmarksForViewer}
-            isRecording={isRecording3D}
-            onRecordingComplete={handleRecordingComplete}
-          />
+          <Skeleton3DViewer worldLandmarks={worldLandmarksForViewer} />
         </div>
       )}
 

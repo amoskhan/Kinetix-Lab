@@ -1,5 +1,5 @@
-import React, { useMemo, useEffect, useRef } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import React, { useMemo } from 'react';
+import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Grid, Line } from '@react-three/drei';
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
 
@@ -131,70 +131,18 @@ function SkeletonBones({ worldLandmarks }: SkeletonBonesProps) {
 
 interface Skeleton3DViewerProps {
     worldLandmarks: NormalizedLandmark[] | null | undefined;
-    isRecording?: boolean;
-    onRecordingComplete?: (blob: Blob) => void;
 }
 
-function RecordingManager({ isRecording, onRecordingComplete }: { isRecording?: boolean; onRecordingComplete?: (blob: Blob) => void }) {
-    const { gl } = useThree();
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const chunksRef = useRef<BlobPart[]>([]);
-
-    useEffect(() => {
-        if (isRecording && !mediaRecorderRef.current) {
-            try {
-                const stream = gl.domElement.captureStream(30);
-                let mimeType = 'video/webm';
-                if (MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) {
-                    mimeType = 'video/webm; codecs=vp9';
-                } else if (MediaRecorder.isTypeSupported('video/mp4')) {
-                    mimeType = 'video/mp4';
-                }
-
-                const recorder = new MediaRecorder(stream, { mimeType });
-                mediaRecorderRef.current = recorder;
-                chunksRef.current = [];
-
-                recorder.ondataavailable = (e) => {
-                    if (e.data.size > 0) chunksRef.current.push(e.data);
-                };
-
-                recorder.onstop = () => {
-                    const blob = new Blob(chunksRef.current, { type: mimeType });
-                    if (onRecordingComplete) onRecordingComplete(blob);
-                };
-
-                recorder.start(100); // collect timeslices
-            } catch (err) {
-                console.error("Failed to start MediaRecorder", err);
-            }
-        } else if (!isRecording && mediaRecorderRef.current) {
-            if (mediaRecorderRef.current.state !== 'inactive') {
-                mediaRecorderRef.current.stop();
-            }
-            mediaRecorderRef.current = null;
-        }
-    }, [isRecording, gl, onRecordingComplete]);
-
-    return null;
-}
-
-export default function Skeleton3DViewer({ worldLandmarks, isRecording, onRecordingComplete }: Skeleton3DViewerProps) {
+export default function Skeleton3DViewer({ worldLandmarks }: Skeleton3DViewerProps) {
     console.log("Rendering Skeleton3DViewer", !!worldLandmarks);
     const hasPose = worldLandmarks && worldLandmarks.length > 0;
 
     return (
         <div className="relative w-full h-56 sm:h-64 bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
-            {/* Label & Recording Indicator */}
+            {/* Label */}
             <div className="absolute top-2 left-3 z-10 flex items-center gap-1.5">
-                {isRecording ? (
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
-                ) : (
-                    <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                )}
-                <span className="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">
-                    {isRecording ? 'RECORDING 3D...' : '3D Skeleton'}
-                </span>
+                <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                <span className="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">3D Skeleton</span>
             </div>
 
             {/* Color legend */}
@@ -212,9 +160,8 @@ export default function Skeleton3DViewer({ worldLandmarks, isRecording, onRecord
             <Canvas
                 camera={{ position: [0, 1.2, 5], fov: 45 }}
                 style={{ background: 'transparent' }}
-                gl={{ antialias: true, alpha: true, preserveDrawingBuffer: true }}
+                gl={{ antialias: true, alpha: true }}
             >
-                <RecordingManager isRecording={isRecording} onRecordingComplete={onRecordingComplete} />
                 {/* Lighting */}
                 <ambientLight intensity={0.6} />
                 <directionalLight position={[5, 5, 5]} intensity={0.8} />
