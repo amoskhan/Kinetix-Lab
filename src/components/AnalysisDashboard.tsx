@@ -48,17 +48,15 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ data }) => {
                I'll use a simple SVG or text for close if I can't easily change imports here without a separate call.
                Or I can just use a styled "Close" button.
            */}
-          <div className="relative max-w-7xl w-full h-full flex flex-col items-center justify-center p-4">
-            <div className="relative max-h-[90vh] flex flex-col items-center gap-4">
-              <img
-                src={selectedImage}
-                alt="Enlarged User Evidence"
-                className="max-w-full max-h-[80vh] object-contain rounded-md shadow-2xl"
-              />
-              <p className="text-white/70 text-sm bg-black/50 px-4 py-1.5 rounded-full backdrop-blur-sm border border-white/10 shrink-0">
-                Click anywhere to close
-              </p>
-            </div>
+          <div className="relative w-screen h-screen flex items-center justify-center p-2 sm:p-4">
+            <img
+              src={selectedImage}
+              alt="Enlarged User Evidence"
+              className="max-w-full max-h-full object-contain"
+            />
+            <p className="absolute bottom-6 text-white/70 text-sm bg-black/50 px-4 py-1.5 rounded-full backdrop-blur-sm border border-white/10 z-10 pointers-events-none">
+              Click anywhere to close
+            </p>
           </div>
         </div>
       )}
