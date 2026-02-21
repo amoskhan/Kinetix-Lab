@@ -48,22 +48,24 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ data }) => {
                I'll use a simple SVG or text for close if I can't easily change imports here without a separate call.
                Or I can just use a styled "Close" button.
            */}
-          <div className="relative max-w-7xl max-h-screen w-full h-full flex items-center justify-center">
-            <img
-              src={selectedImage}
-              alt="Enlarged User Evidence"
-              className="max-w-full max-h-full object-contain rounded-md shadow-2xl"
-            />
-            <p className="absolute bottom-4 text-white/70 text-sm bg-black/50 px-3 py-1 rounded-full">
-              Click anywhere to close
-            </p>
+          <div className="relative max-w-7xl w-full h-full flex flex-col items-center justify-center p-4">
+            <div className="relative max-h-[90vh] flex flex-col items-center gap-4">
+              <img
+                src={selectedImage}
+                alt="Enlarged User Evidence"
+                className="max-w-full max-h-[80vh] object-contain rounded-md shadow-2xl"
+              />
+              <p className="text-white/70 text-sm bg-black/50 px-4 py-1.5 rounded-full backdrop-blur-sm border border-white/10 shrink-0">
+                Click anywhere to close
+              </p>
+            </div>
           </div>
         </div>
       )}
 
       {/* Header Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pdf-section">
-        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
+        <div className="glass-card p-6 rounded-2xl sm:rounded-3xl flex-1">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Activity className="text-blue-400" />
@@ -79,7 +81,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ data }) => {
           <p className="text-slate-400 mt-2">Phase: <span className="text-slate-200">{data.phaseDetected}</span></p>
         </div>
 
-        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg flex flex-col justify-between">
+        <div className="glass-card p-6 rounded-2xl sm:rounded-3xl flex flex-col justify-between flex-1">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <ShieldCheck className={data.safetyRating > 7 ? "text-green-400" : "text-amber-400"} />
             Safety Score
@@ -100,7 +102,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ data }) => {
       </div>
 
       {/* Joint Angle Analysis */}
-      <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg pdf-section">
+      <div className="glass-card p-6 sm:p-8 rounded-2xl sm:rounded-3xl pdf-section">
         <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
           <Activity className="text-emerald-400" />
           Joint Biomechanics
@@ -153,7 +155,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ data }) => {
       </div>
 
       {/* Step-by-Step Walkthrough */}
-      <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg pdf-section">
+      <div className="glass-card p-6 sm:p-8 rounded-2xl sm:rounded-3xl pdf-section">
         <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
           <BookOpen className="text-blue-400" />
           Technique Walkthrough
@@ -191,7 +193,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ data }) => {
 
       {/* General Feedback & Corrections */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pdf-section">
-        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg relative overflow-hidden">
+        <div className="glass-card p-6 sm:p-8 rounded-2xl sm:rounded-3xl relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10">
             <CheckCircle size={100} />
           </div>
@@ -211,7 +213,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ data }) => {
           </ul>
         </div>
 
-        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
+        <div className="glass-card p-6 sm:p-8 rounded-2xl sm:rounded-3xl">
           <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
             <Activity className="text-indigo-400" />
             Biomechanics Summary
@@ -229,7 +231,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ data }) => {
 
       {/* Visual Evidence (Key Frames) */}
       {data.frames && data.frames.length > 0 && (
-        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg pdf-section">
+        <div className="glass-card p-6 sm:p-8 rounded-2xl sm:rounded-3xl pdf-section">
           <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
             <BookOpen className="text-purple-400" />
             Visual Evidence
@@ -243,7 +245,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ data }) => {
                 </h3>
                 <div data-pdf-grid className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                   {view.images && view.images.map((frame: string, idx: number) => (
-                    <div key={idx} className="relative group aspect-video bg-slate-900 rounded-lg overflow-hidden border border-slate-700 pdf-item">
+                    <div key={idx} className="relative group aspect-video glass rounded-xl overflow-hidden pdf-item">
                       <img
                         src={frame}
                         alt={`${view.label} Frame ${idx + 1}`}

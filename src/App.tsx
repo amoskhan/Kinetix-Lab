@@ -168,6 +168,46 @@ const App: React.FC = () => {
     }
   };
 
+  // --- Export CSV Handler ---
+  const handleExportCSV = async () => {
+    try {
+      setStatus(AnalysisStatus.ANALYZING);
+      setLoadingMessage("Scanning video for joint data...");
+
+      // Choose main video, or front if dual
+      const primaryId = viewMode === 'single' ? 'main' : 'front';
+      const player = playerRefs.current[primaryId];
+
+      if (!player) throw new Error("Video player not found.");
+
+      const isMobile = window.innerWidth <= 768 || ('ontouchstart' in window);
+      const fps = isMobile ? 2 : 5; // Reduced rate on mobile to prevent crashes
+
+      const timeSeriesData = await player.extractTimeSeriesData(fps);
+
+      if (!timeSeriesData || timeSeriesData.length === 0) {
+        throw new Error("No pose data could be extracted.");
+      }
+
+      const headers = Object.keys(timeSeriesData[0]);
+      const csvRows = [headers.join(',')];
+
+      for (const row of timeSeriesData) {
+        csvRows.push(headers.map(header => row[header]).join(','));
+      }
+
+      const csvString = csvRows.join('\n');
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      saveAs(blob, `kinetix_joint_data_${new Date().toISOString().slice(0, 10)}.csv`);
+
+      setStatus(AnalysisStatus.IDLE);
+    } catch (e: any) {
+      console.error("CSV Export failed:", e);
+      setErrorMessage(e.message || "Failed to export CSV.");
+      setStatus(AnalysisStatus.ERROR);
+    }
+  };
+
   // --- Storage Test Handler ---
   const handleTestStorage = async () => {
     const testRecord = {
@@ -359,7 +399,7 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-50 flex flex-col font-sans">
+    <div className="min-h-screen text-slate-50 flex flex-col font-sans bg-transparent">
       {/* Navbar */}
       <Navbar showHistory={showHistory} setShowHistory={setShowHistory} />
 
@@ -396,7 +436,7 @@ const App: React.FC = () => {
             </div>
 
             {/* Input Section */}
-            <div className="bg-slate-800/50 rounded-xl sm:rounded-2xl border border-slate-700 p-4 sm:p-6">
+            <div className="glass-panel rounded-2xl sm:rounded-3xl p-5 sm:p-8">
               <div className="mb-6">
                 <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-2">Movement Skill </label>
                 <input
@@ -466,11 +506,22 @@ const App: React.FC = () => {
                 <button
                   onClick={handleExportFrames}
                   disabled={status === AnalysisStatus.ANALYZING}
-                  className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl font-medium text-slate-300 hover:text-white hover:border-slate-600 transition-colors"
+                  className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-3 glass-card border-none hover:bg-slate-700/50 rounded-xl font-medium text-slate-300 hover:text-white transition-colors"
                   title="Download captured frames for debugging"
                 >
                   <Download size={20} />
-                  <span className="hidden sm:inline">Export Frames</span>
+                  <span className="hidden lg:inline">Frames</span>
+                </button>
+
+                {/* Export CSV Button */}
+                <button
+                  onClick={handleExportCSV}
+                  disabled={status === AnalysisStatus.ANALYZING}
+                  className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-3 glass-card border-none hover:bg-slate-700/50 rounded-xl font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+                  title="Download joint angles over time (Excel CSV)"
+                >
+                  <Activity size={20} />
+                  <span className="hidden lg:inline">CSV Data</span>
                 </button>
 
                 {/* Error Message */}
@@ -483,9 +534,9 @@ const App: React.FC = () => {
                 <button
                   onClick={handleGlobalAnalyze}
                   disabled={status === AnalysisStatus.ANALYZING}
-                  className={`flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-all ${status === AnalysisStatus.ANALYZING
-                    ? 'bg-slate-600 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 active:scale-95 shadow-blue-900/20'
+                  className={`flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-bold text-white shadow-xl transition-all duration-300 ${status === AnalysisStatus.ANALYZING
+                    ? 'bg-slate-700/50 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 hover:shadow-indigo-500/25 hover:-translate-y-0.5 active:scale-95'
                     }`}
                 >
                   {status === AnalysisStatus.ANALYZING ? (
@@ -505,7 +556,7 @@ const App: React.FC = () => {
 
             {/* Results Section */}
             {status === AnalysisStatus.COMPLETE && analysisResult && (
-              <div ref={analysisRef} className="bg-slate-800/50 rounded-2xl border border-slate-700 p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div ref={analysisRef} className="glass-panel rounded-3xl p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                 <div className="flex justify-end mb-4">
                   <PDFExportButton analysisData={analysisResult} analysisRef={analysisRef} />
                 </div>
