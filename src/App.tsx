@@ -26,6 +26,7 @@ const App: React.FC = () => {
     return isMobile ? 5 : 10;
   });
   const [smartSearch, setSmartSearch] = useState(true);
+  const [includeSkeletonExport, setIncludeSkeletonExport] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
 
   // --- Snapshot State ---
@@ -135,7 +136,7 @@ const App: React.FC = () => {
             }
 
             // Capture frames
-            const data = await player.captureMultiFrames(captureWindow, interval, centerTime);
+            const data = await player.captureMultiFrames(captureWindow, interval, centerTime, includeSkeletonExport);
 
             if (data && data.capture.frames.length > 0) {
               hasFrames = true;
@@ -300,7 +301,7 @@ const App: React.FC = () => {
             // but for "Analysis" of the whole movement, uniform distribution is safer for phase detection.
             // We'll stick to full video coverage as requested.
 
-            const data = await player.captureMultiFrames(effectiveCaptureWindow, interval, centerTime);
+            const data = await player.captureMultiFrames(effectiveCaptureWindow, interval, centerTime, includeSkeletonExport);
             if (data) {
               views.push({
                 label: id === 'main' ? 'Main View' : (id === 'front' ? 'Front View' : 'Side View'),
@@ -460,6 +461,22 @@ const App: React.FC = () => {
                     {smartSearch && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
                   </div>
                   <span>Smart Search</span>
+                </button>
+
+                {/* Skeleton Overlay Toggle */}
+                <button
+                  onClick={() => setIncludeSkeletonExport(!includeSkeletonExport)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all ${includeSkeletonExport
+                    ? 'bg-blue-900/40 border-blue-500/50 text-blue-200'
+                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-300'
+                    }`}
+                  title="Include skeleton and angle overlays on exported and analyzed frames"
+                >
+                  <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${includeSkeletonExport ? 'border-blue-400 bg-blue-400' : 'border-slate-500'}`}>
+                    {includeSkeletonExport && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                  </div>
+                  <span className="hidden sm:inline">Include Skeleton</span>
+                  <span className="sm:hidden">Skeleton</span>
                 </button>
 
                 {/* Export Frames Button */}

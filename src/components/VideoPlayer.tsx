@@ -8,8 +8,8 @@ import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
 
 // Define the handle interface for the parent to communicate with
 export interface VideoPlayerHandle {
-  captureFrame: () => Promise<{ base64: string; telemetry: string } | null>;
-  captureMultiFrames: (count?: number, interval?: number, startTimeOverride?: number) => Promise<{ capture: MultiFrameCapture; centerPose: PoseData | undefined } | null>;
+  captureFrame: (includeOverlay?: boolean) => Promise<{ base64: string; telemetry: string } | null>;
+  captureMultiFrames: (count?: number, interval?: number, startTimeOverride?: number, includeOverlay?: boolean) => Promise<{ capture: MultiFrameCapture; centerPose: PoseData | undefined } | null>;
   getVideoElement: () => HTMLVideoElement | null;
   findPeak: () => Promise<number>;
 }
@@ -52,7 +52,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
 
   // --- Expose Methods via Ref ---
   useImperativeHandle(ref, () => ({
-    captureFrame: async () => {
+    captureFrame: async (includeOverlay: boolean = true) => {
       if (!videoRef.current) return null;
       videoRef.current.pause();
       setIsPlaying(false);
@@ -66,13 +66,21 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
         latestTelemetryRef.current = formatTelemetryForPrompt(angs, symmetry);
       }
 
+      // If we need the overlay, we need to draw it to a temporary canvas.
+      // captureVideoFrame just captures the raw video.
+      // If includeOverlay is false, we can just use captureVideoFrame.
+      // But actually captureFrame currently just uses captureVideoFrame, which DOES NOT have the skeleton!
+      // Wait, let's verify if `captureFrame` has skeleton today.
+      // currently: const base64 = captureVideoFrame(videoRef.current);
+      // captureVideoFrame only draws the video element, so it ALREADY doesn't include the skeleton!
+      // Let's not touch captureFrame logic for now unless we need to.
       const base64 = captureVideoFrame(videoRef.current);
       if (base64) {
         return { base64, telemetry: latestTelemetryRef.current };
       }
       return null;
     },
-    captureMultiFrames: async (count: number = 3, interval: number = 0.5, startTimeOverride?: number) => {
+    captureMultiFrames: async (count: number = 3, interval: number = 0.5, startTimeOverride?: number, includeOverlay: boolean = true) => {
       if (!videoRef.current) return null;
       videoRef.current.pause();
       setIsPlaying(false);
@@ -81,6 +89,8 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
 
       const onFrameDraw = async (ctx: CanvasRenderingContext2D, time: number) => {
         if (!videoRef.current) return;
+
+        if (!includeOverlay) return; // Skip drawing overlay if requested
 
         // 1. Detect pose at this specific timestamp
         const livePose = await poseDetectionService.detectPoseFrame(videoRef.current);
@@ -110,7 +120,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(({ label = "
           referenceTime,
           count,
           interval,
-          onFrameDraw // Pass the overlay callback
+          includeOverlay ? onFrameDraw : undefined // Pass undefined to use standard capture if no overlay
         );
 
         const centerPose = await poseDetectionService.detectPoseFromVideo(videoRef.current, referenceTime * 1000);
